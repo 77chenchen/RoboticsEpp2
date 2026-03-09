@@ -11,6 +11,7 @@ import socket
 # ==============================================================================
 PORT = "/dev/ttyUSB0"
 BAUDRATE = 115200
+CONNECTION_PARAMS = ('100.71.68.106', 12345) 
 
 '''
 GRID_WIDTH = 100   
@@ -24,14 +25,10 @@ AXIS_CHAR_V = "│"
 AXIS_CHAR_CENTER = "┼"
 '''
 
-CONNECTION_PARAMS = ('100.71.68.106', 12345) 
+
 
 
 if __name__ == "__main__":
-    fig, ax = plt.subplots()
-    pltx, plty = [],[] 
-    #
-   
 
     print("====== LiDAR Live Plot ======")
     lidar = lidarConnect(port=PORT, baudrate=BAUDRATE, wait=2)
