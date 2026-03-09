@@ -67,5 +67,5 @@ if __name__ == "__main__":
     finally:
         lidarDisconnect(lidar)
         s.close() 
-        ui_show_cursor()
+        #ui_show_cursor()
         sys.stdout.flush()
