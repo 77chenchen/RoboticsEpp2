@@ -4,6 +4,7 @@ PORT = 12345
 import matplotlib.pyplot as plt
 import numpy as np
 import math
+import time
 import struct
 plt.ion()
 
@@ -38,7 +39,6 @@ async def handle_client(reader, writer):
 
                 
             # make sure it's numpy arrays
-            angles, distances = scan_data 
             xs = distances * np.cos(angles*np.pi/180)
             ys = distances * np.sin(angles*np.pi/180) 
             
