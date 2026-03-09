@@ -59,6 +59,8 @@ typedef enum {
 volatile TButtonState buttonState  = STATE_RUNNING;
 volatile bool         stateChanged = false;
 
+unsigned long lastDebounceTime = 0;
+
 // ============================================================
 // PACKET UTILITIES
 // ============================================================
@@ -93,7 +95,13 @@ bool receivePacket(TPacket *pkt) {
 //   params[0]  = param
 // then call sendPacket() to transmit it.
 void sendResponse(TResponseType resp, uint32_t param) {
-  // YOUR CODE HERE
+  TPacket PacketToSend;
+  
+  PacketToSend.packetType = PACKET_TYPE_RESPONSE;
+  PacketToSend.command = resp;
+  PacketToSend.params[0] = param
+
+  sendPacket(PacketToSend);
 }
 
 // TODO (Activity 3): Implement sendStatus().
@@ -101,6 +109,7 @@ void sendResponse(TResponseType resp, uint32_t param) {
 // Call sendResponse correctly
 void sendStatus() {
   // YOUR CODE HERE
+  sendResponse(RESP_STATUS,buttonState);
 }
 
 // Process an incoming COMMAND packet.
@@ -122,9 +131,22 @@ void handleCommand(TPacket *pkt) {
 //   STATE_RUNNING + button pressed  -> STATE_STOPPED; stateChanged = true
 //   STATE_STOPPED + button released -> STATE_RUNNING; stateChanged = true
 //
-// ISR(...) {
-  // YOUR CODE HERE
-// }
+ISR(INT0_vect) {
+  int state = digitalRead(2);
+
+  if((millis() - lastDebounceTime) < 50) {
+    lastDebounceTime = millis();
+    return;
+  }
+
+  if(state == HIGH && buttonState = STATE_RUNNING){
+    buttonState = STATE_STOPPED;
+    stateChanged = true;
+  } else if(state == LOW && buttonState = STATE_STOPPED) {
+    buttonState = STATE_RUNNING;
+    stateChanged = true;
+  }
+}
 
 // ============================================================
 // SETUP
@@ -132,7 +154,9 @@ void handleCommand(TPacket *pkt) {
 
 void setup() {
   Serial.begin(9600);
-
+  cli();
+  EICRA = 0b0001;
+  EIMSK = 0b01;
  // TODO (Activity 3a): Enable the button to fire an interrupt on any
   // logical change (both rising and falling edges).
   sei();
