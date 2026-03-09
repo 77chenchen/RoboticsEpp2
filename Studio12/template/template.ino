@@ -99,9 +99,9 @@ void sendResponse(TResponseType resp, uint32_t param) {
   
   PacketToSend.packetType = PACKET_TYPE_RESPONSE;
   PacketToSend.command = resp;
-  PacketToSend.params[0] = param
+  PacketToSend.params[0] = param;
 
-  sendPacket(PacketToSend);
+  sendPacket(&PacketToSend);
 }
 
 // TODO (Activity 3): Implement sendStatus().
@@ -139,10 +139,10 @@ ISR(INT0_vect) {
     return;
   }
 
-  if(state == HIGH && buttonState = STATE_RUNNING){
+  if(state == HIGH && buttonState == STATE_RUNNING){
     buttonState = STATE_STOPPED;
     stateChanged = true;
-  } else if(state == LOW && buttonState = STATE_STOPPED) {
+  } else if(state == LOW && buttonState == STATE_STOPPED) {
     buttonState = STATE_RUNNING;
     stateChanged = true;
   }
