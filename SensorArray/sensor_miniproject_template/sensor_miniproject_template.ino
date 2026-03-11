@@ -193,6 +193,18 @@ void setup() {
     TCNT1 = 0;           // reset counter
     TCCR1B |= (1 << CS11) | (1 << CS10);   // prescaler = 64
     DDRE &= ~(1 << 5);
+
+    // TO DO
+    // SET PD0 AS AN INTERRUPT WITH RISING EDGE
+    // COMMAND_COLOUR_SENSOR RESP_COLOUR
+    
+    // Color Sensor
+    DDRD &= ~(1 << 0);
+    DDRJ |= (1 << 0) | (1 << 1);
+    DDRH |= (1 << 0) | (1 << 1);
+
+    PORTJ |= (1 << 0);
+    
   // TODO (Activity 3a): Enable the button to fire an interrupt on any
     // logical change (both rising and falling edges).
     sei();
