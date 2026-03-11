@@ -20,7 +20,8 @@
 
 #include "packets.h"
 #include "serial_driver.h"
-
+uint16_t lastDebounceTime = 0; //debounce variable
+bool currentStatus = true;     //helper variable for INT5 ISR
 // =============================================================
 // Packet helpers (pre-implemented for you)
 // =============================================================
@@ -64,7 +65,27 @@ volatile bool   stateChanged = false;
  * in setup() -- check the ATMega2560 datasheet for the correct
  * registers for your chosen pin.
  */
+ ISR(INT5_vect) {
+    uint16_t timeCurrent = TCNT1;
 
+    if(timeCurrent - lastDebounceTime > 250) {
+      lastDebounceTime = timeCurrent;
+      int state = (PINE & (1 << 5));
+
+      if(state && buttonState == STATE_RUNNING && currentStatus == true) {
+        buttonState = STATE_STOPPED;
+        stateChanged = true;
+      }
+      else if (!state && buttonState == STATE_STOPPED && currentStatus == true) {
+        currentStatus = false;
+      }
+      else if(!state && buttonState == STATE_STOPPED && currentStatus == false) {
+        buttonState = STATE_RUNNING;
+        stateChanged = true;
+        currentStatus = true;
+      }
+    }
+  }
 
 // =============================================================
 // Color sensor (TCS3200)
@@ -164,6 +185,16 @@ void setup() {
 #endif
     // TODO (Activity 1): configure the button pin and its external interrupt,
     // then call sei() to enable global interrupts.
+    cli();
+    EICRB = 0b00000100;
+    EIMSK = 0b00100000;
+    TCCR1A = 0;          // normal mode
+    TCCR1B = 0;
+    TCNT1 = 0;           // reset counter
+    TCCR1B |= (1 << CS11) | (1 << CS10);   // prescaler = 64
+    DDRE &= ~(1 << 5);
+  // TODO (Activity 3a): Enable the button to fire an interrupt on any
+    // logical change (both rising and falling edges).
     sei();
 }
 
