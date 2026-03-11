@@ -16,7 +16,7 @@ BAUDRATE = 115200
 
 camera = None 
 
-def camera_conncect():
+def camera_connect():
     global camera
     camera = alex_camera.cameraOpen()
     
@@ -35,7 +35,7 @@ def camera_capture(): # returns bool of success or not
     try:
 
         greyscale_arr = alex_camera.captureGreyscaleFrame(camera)
-        assert greyscale_arr.dtype = np.uint8, "Camera error: wrong data type, got {}".format(greyscale_arr.dtype) 
+        assert greyscale_arr.dtype == np.uint8, "Camera error: wrong data type, got {}".format(greyscale_arr.dtype) 
         data = greyscale_arr.tobytes()
 
         header = struct.pack('!II', alex_camera.RENDER_HEIGHT, alex_camera.RENDER_WIDTH)

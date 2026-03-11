@@ -16,7 +16,7 @@ BAUDRATE = 115200
 
 lidar = None 
 
-def lidar_conncect():
+def lidar_connect():
     global lidar
     lidar = lidarConnect(port=PORT, baudrate=BAUDRATE, wait=2)
 

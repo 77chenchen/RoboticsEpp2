@@ -264,6 +264,7 @@ def handleColorCommand():
         print("Refused: E-Stop is active")
         return
     # TODO
+    sendCommand(COMMAND_COLOR_SENSOR)
     pass
 
 
