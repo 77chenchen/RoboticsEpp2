@@ -59,7 +59,7 @@
   volatile TButtonState buttonState  = STATE_RUNNING;
   volatile bool         stateChanged = false;
 
-  unsigned long lastDebounceTime = 0;
+  uint16_t lastDebounceTime = 0;
   volatile bool currentStatus = true;
 
   // ============================================================
@@ -135,7 +135,7 @@
   ISR(INT5_vect) {
     uint16_t timeCurrent = TCNT1;
 
-    if(timeCurrent - lastDebounceTime > 750) {
+    if(timeCurrent - lastDebounceTime > 250) {
       lastDebounceTime = timeCurrent;
       int state = digitalRead(3);
 
