@@ -145,6 +145,7 @@ void setup() {
   cli();
   EICRA = 0b00000001;
   EIMSK = 0b00000001;
+  pinMode(21, INPUT);
  // TODO (Activity 3a): Enable the button to fire an interrupt on any
   // logical change (both rising and falling edges).
   sei();
