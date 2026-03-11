@@ -59,7 +59,7 @@ typedef enum {
 volatile TButtonState buttonState  = STATE_RUNNING;
 volatile bool         stateChanged = false;
 
-volatile uint16_t lastDebounceTime = 0;
+unsigned long lastDebounceTime = 0;
 volatile bool buttonInterrupt = false;
 
 // ============================================================
@@ -132,23 +132,8 @@ void handleCommand(TPacket *pkt) {
 //   STATE_RUNNING + button pressed  -> STATE_STOPPED; stateChanged = true
 //   STATE_STOPPED + button released -> STATE_RUNNING; stateChanged = true
 //
-ISR(INT0_vect) {
-
-  uint16_t timeCurrent = TCNT1;
-
-  if(timeCurrent - lastDebounceTime > 2500) {
-    lastDebounceTime = timeCurrent;
-    int state = PIND & (1 << PD2);
-
-    if(state == HIGH && buttonState == STATE_RUNNING) {
-      buttonState = STATE_STOPPED;
-      stateChanged = true;
-    } 
-    else if(state == LOW && buttonState == STATE_STOPPED) {
-      buttonState = STATE_RUNNING;
-      stateChanged = true;
-    }
-  }
+ISR(INT5_vect) {
+  buttonInterrupt = true;
 }
 
 // ============================================================
@@ -158,8 +143,9 @@ ISR(INT0_vect) {
 void setup() {
   Serial.begin(9600);
   cli();
-  EICRA = 0b0001;
-  EIMSK = 0b01;
+  EICRB = 0b00000100;
+  EIMSK = 0b00100000;
+  pinMode(3, INPUT);
  // TODO (Activity 3a): Enable the button to fire an interrupt on any
   // logical change (both rising and falling edges).
   sei();
@@ -170,6 +156,24 @@ void setup() {
 // ============================================================
 
 void loop() {
+  if(buttonInterrupt) {
+
+
+    if(millis() - lastDebounceTime > 50) {
+      lastDebounceTime = millis();
+      int state = digitalRead(3);
+
+      if(state == HIGH && buttonState == STATE_RUNNING) {
+        buttonState = STATE_STOPPED;
+        stateChanged = true;
+      } 
+      else if(state == LOW && buttonState == STATE_STOPPED) {
+        buttonState = STATE_RUNNING;
+        stateChanged = true;
+      }
+    }
+    buttonInterrupt = false;
+  }
 
   // Check for incoming command packets from the Pi.
   TPacket incoming;
