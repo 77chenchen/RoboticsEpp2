@@ -1,5 +1,9 @@
 PORT = 12346
 
+new_width = 1536//2
+new_height = 864//2
+
+
 
 import cv2
 import numpy as np
@@ -20,6 +24,7 @@ async def handle_client(reader, writer):
     addr = writer.get_extra_info('peername')
     print(f"Connected by {addr}")
 
+    window_name = "Camera: {}".format(addr) 
 
     try:
 
@@ -30,11 +35,13 @@ async def handle_client(reader, writer):
                 break # client quit 
             img_height, img_width = struct.unpack('!II', size_data)
 
-            img_data = size_data.readexactly(8*img_height*img_width ) 
+            img_data = await reader.readexactly( img_height*img_width ) 
 
             img = np.frombuffer(img_data, dtype=np.uint8).reshape((img_height, img_width))
 
-            cv2.imshow(addr, img)
+            resized_image = cv2.resize(img, (new_width, new_height), interpolation=cv2.INTER_AREA) # INTER_AREA is good for downscaling
+
+            cv2.imshow(window_name, resized_image)
             cv2.waitKey(1)
 
             
@@ -46,8 +53,11 @@ async def handle_client(reader, writer):
         print(f"Closing connection for {addr}")
         writer.close()
         await writer.wait_closed()
-        cv2.waitKey(0)
-        cv2.destroyWindow(addr) 
+        try: 
+            cv2.waitKey(0)
+            cv2.destroyWindow(window_name)
+        except:
+            pass 
 
 async def main():
     server = await asyncio.start_server(
