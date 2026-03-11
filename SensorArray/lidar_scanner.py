@@ -4,43 +4,35 @@ import numpy as np
 import time
 from lidar.alex_lidar import lidarConnect, lidarDisconnect, lidarStatus, performSingleScan
 import struct
-import socket 
+import socket
+
+from connection_params import LIDAR_CONNECTION_PARAMS as CONNECTION_PARAMS
 
 # ==============================================================================
 # GLOBAL CONFIGURATION
 # ==============================================================================
 PORT = "/dev/ttyUSB0"
 BAUDRATE = 115200
-CONNECTION_PARAMS = ('100.71.68.106', 12345) 
 
-'''
-GRID_WIDTH = 100   
-GRID_HEIGHT = 60   
-MAX_RANGE_MM = 2500 
-CLI_ASPECT_RATIO = 2.2
+lidar = None 
 
-DENSITY_CHARS = " ░▒▓█" 
-AXIS_CHAR_H = "─"
-AXIS_CHAR_V = "│"
-AXIS_CHAR_CENTER = "┼"
-'''
-
-
-
-
-if __name__ == "__main__":
-
-    print("====== LiDAR Live Plot ======")
+def lidar_conncect():
+    global lidar
     lidar = lidarConnect(port=PORT, baudrate=BAUDRATE, wait=2)
+
+
+def lidar_scan():
+    #print("====== LiDAR Live Plot ======")
+    assert lidar is not None, "Lidar has not been connected yet!" 
     status = lidarStatus(lidar)
     mode = status['typical_scan_mode']
     print(f"Connected. Mode: {mode}\n")
 
-    print("====== Scanning ======")
+    #print("====== Scanning ======")
     # Reserve space for the CLI plot and hide the cursor.
     #move_up_amount = ui_prepare_frame(GRID_HEIGHT)
 
-    lidar = lidarConnect(port=PORT, baudrate=BAUDRATE, wait=2)
+    #lidar = lidarConnect(port=PORT, baudrate=BAUDRATE, wait=2)
     s = socket.socket()
     s.connect(CONNECTION_PARAMS) 
 
@@ -66,8 +58,17 @@ if __name__ == "__main__":
         #sys.stdout.write("\n" * 2)
         print("Scan stopped by user.")
     finally:
-        lidarDisconnect(lidar)
         s.sendall(struct.pack('i' -1)) # -1 is exit 
         s.close() 
         #ui_show_cursor()
         sys.stdout.flush()
+
+def lidar_disconnect():
+    if lidar is not None:
+        lidarDisconnect(lidar)
+        
+
+if __name__ == "__main__":
+    lidar_connect() 
+    lidar_scan()
+    lidar_disconnect() 

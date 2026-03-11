@@ -22,6 +22,10 @@ import time
 import sys
 import select
 
+import camera_handler as CameraHandler  
+import lidar_scanner as LidarScanner
+
+
 # ----------------------------------------------------------------
 # SERIAL PORT SETUP
 # ----------------------------------------------------------------
@@ -257,9 +261,8 @@ def handleColorCommand():
 # ACTIVITY 3: CAMERA
 # ----------------------------------------------------------------
 
-# TODO (Activity 3): import the camera library provided (alex_camera.py).
 
-_camera = None          # TODO (Activity 3): open the camera (cameraOpen()) before first use.
+#_camera = None          # TODO (Activity 3): open the camera (cameraOpen()) before first use.
 _frames_remaining = 5   # frames remaining before further captures are refused
 
 
@@ -271,27 +274,31 @@ def handleCameraCommand():
     Use captureGreyscaleFrame() and renderGreyscaleFrame() from alex_camera.
     """
     global _frames_remaining
-    # TODO
-    pass
+    # TODO check E-Stop state
+
+    if _frames_remaining == 0:
+        print("Could not capture frame: no frames remaining")
+        return
+
+    if CameraHandler.camera_capture(): # if succes 
+        _frames_remaining -= 1 
 
 
 # ----------------------------------------------------------------
 # ACTIVITY 4: LIDAR
 # ----------------------------------------------------------------
 
-# TODO (Activity 4): import from lidar.alex_lidar and lidar_example_cli_plot
-#   (lidar_example_cli_plot.py is in the same folder; alex_lidar.py is in lidar/).
-
 
 def handleLidarCommand():
     """
-    TODO (Activity 4): perform a single LIDAR scan and render it.
+    Activity 4: perform a single LIDAR scan and render it.
 
     Gate on E-Stop state, then use the LIDAR library to capture one scan
     and the CLI plot helpers to display it.
     """
-    # TODO
-    pass
+    # TODO check E-Stop state
+    
+    LidarScanner.lidar_scan() 
 
 
 # ----------------------------------------------------------------
@@ -354,10 +361,14 @@ def runCommandInterface():
 
 if __name__ == '__main__':
     openSerial()
+    LidarScanner.lidar_connect()
+    #_camera = alex_camera.cameraOpen()
+    Camerahandler.camera_connect() 
     try:
         runCommandInterface()
     except KeyboardInterrupt:
         print("\nExiting.")
     finally:
-        # TODO (Activities 3 & 4): close the camera and disconnect the LIDAR here if you opened them.
+        LidarScanner.lidar_disconnect()
+        CameraHandler.camra_close()
         closeSerial()
