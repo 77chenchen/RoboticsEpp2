@@ -215,7 +215,47 @@ static void handleCommand(const TPacket *cmd) {
         pkt.params[2]  = b;
         sendFrame(&pkt);
         break;
-}
+        }
+        case COMMAND_FORWARD{
+            forward(motorSpeed);
+            sendMotorStatus(motorSpeed);
+            break;
+        }
+
+        case COMMAND_BACKWARD{
+            backward(motorSpeed);
+            sendMotorStatus(motorSpeed);
+            break;
+        }
+        case COMMAND_LEFT{
+            ccw(motorSpeed);
+            sendMotorStatus(motorSpeed);
+            break;
+        }
+        case COMMAND_RIGHT{
+            cw(motorSpeed);
+            sendMotorStatus(motorSpeed);
+            break;
+        }
+        case COMMAND_STOP{
+            stop();
+            sendMotorStatus(motorSpeed);
+            break;
+        }
+        case COMMAND_SET_SPEED: {
+            uint32_t newSpeed = command->params[0];
+
+            if (newSpeed > 255) newSpeed = 255;
+            motorSpeed = (int)newSpeed;
+
+            sendMotorStatus(motorSpeed);
+            break;
+        }
+
+        default{
+            sendOk();
+            break;
+        }
     }
 }
 
