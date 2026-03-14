@@ -6,3 +6,6 @@ import time
 import struct
 import socket 
 import asyncio
+plt.ion() 
+
+print("IMPORTS SUCCESSFUL!")
