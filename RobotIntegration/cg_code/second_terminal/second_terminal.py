@@ -57,7 +57,7 @@ from net_utils import TCPClient, sendTPacketFrame, recvTPacketFrame
 # ---------------------------------------------------------------------------
 # Both scripts run on the same Pi, so the host is 'localhost'.
 # Change PI_HOST to the Pi's IP address if you run this from a different machine.
-PI_HOST = 'localhost'
+PI_HOST = '100.109.145.53'
 PI_PORT = 65432
 
 
@@ -70,21 +70,35 @@ PACKET_TYPE_COMMAND  = 0
 PACKET_TYPE_RESPONSE = 1
 PACKET_TYPE_MESSAGE  = 2
 
-COMMAND_ESTOP = 0
+COMMAND_ESTOP  = 0
+
+COMMAND_COLOR_SENSOR = 1
+COMMAND_FORWARD = 2
+COMMAND_BACKWARD = 3
+COMMAND_LEFT = 4
+COMMAND_RIGHT = 5
+COMMAND_SET_SPEED = 6
+COMMAND_STOP = 7
 
 RESP_OK     = 0
 RESP_STATUS = 1
+
+RESP_COLOR_SENSOR = 2
+RESP_MOTOR_STATUS = 3
 
 STATE_RUNNING = 0
 STATE_STOPPED = 1
 
 MAX_STR_LEN  = 32
 PARAMS_COUNT = 16
-TPACKET_SIZE = 1 + 1 + 2 + MAX_STR_LEN + (PARAMS_COUNT * 4)   # = 100
+
+TPACKET_SIZE = 1 + 1 + 2 + MAX_STR_LEN + (PARAMS_COUNT * 4)  # = 100
 TPACKET_FMT  = f'<BB2x{MAX_STR_LEN}s{PARAMS_COUNT}I'
 
-MAGIC      = b'\xDE\xAD'
-FRAME_SIZE = len(MAGIC) + TPACKET_SIZE + 1   # = 103
+motor_speed = 150
+
+MAGIC = b'\xDE\xAD'          # 2-byte magic number (0xDEAD)
+FRAME_SIZE = len(MAGIC) + TPACKET_SIZE + 1   # 2 + 100 + 1 = 103
 
 
 # ---------------------------------------------------------------------------

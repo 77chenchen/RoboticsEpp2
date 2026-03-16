@@ -140,6 +140,7 @@ async def handle_client(reader, writer):
                     baud_data = await reader.readexactly(4)
                     baudrate = struct.unpack('i', baud_data)[0]
                 
+                print("CONNECTING")
                 lidar = connect(port=port, baudrate=baudrate)
                 if lidar is not None:
                     lidar_id = next_lidar_id
