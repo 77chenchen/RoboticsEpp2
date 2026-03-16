@@ -551,6 +551,7 @@ void setup() {
 #else
     Serial.begin(9600);
 #endif
+
     // TODO (Activity 1): configure the button pin and its external interrupt,
     // then call sei() to enable global interrupts.
     cli();
