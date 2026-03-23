@@ -1,0 +1,74 @@
+import shutil
+import sys
+import numpy as np
+import time
+from alex_lidar import lidarConnect, lidarDisconnect, lidarStatus, performSingleScan
+import struct
+import socket
+
+from connection_params import LIDAR_CONNECTION_PARAMS as CONNECTION_PARAMS
+
+# ==============================================================================
+# GLOBAL CONFIGURATION
+# ==============================================================================
+PORT = "/dev/ttyUSB0"
+BAUDRATE = 115200
+
+lidar = None 
+
+def lidar_connect():
+    global lidar
+    lidar = lidarConnect(port=PORT, baudrate=BAUDRATE, wait=2)
+
+
+def lidar_scan():
+    #print("====== LiDAR Live Plot ======")
+    assert lidar is not None, "Lidar has not been connected yet!" 
+    status = lidarStatus(lidar)
+    mode = status['typical_scan_mode']
+    print(f"Connected. Mode: {mode}\n")
+
+    #print("====== Scanning ======")
+    # Reserve space for the CLI plot and hide the cursor.
+    #move_up_amount = ui_prepare_frame(GRID_HEIGHT)
+
+    #lidar = lidarConnect(port=PORT, baudrate=BAUDRATE, wait=2)
+    s = socket.socket()
+    s.connect(CONNECTION_PARAMS) 
+
+    try:
+        
+        if True:
+            # Retrieve and print the LiDAR device information
+            status = lidarStatus(lidar)
+            
+            #print("====== Scanning ======")
+            # Get a single scan using the library. This returns the scan data.
+            scan_data = performSingleScan(lidar, status['typical_scan_mode'])
+
+            packed_data = struct.pack('i', len(scan_data[0]))
+            packed_data += struct.pack(f'{len(scan_data[0])}d', *scan_data[0])
+            packed_data += struct.pack(f'{len(scan_data[1])}d', *scan_data[1])
+
+            s.sendall(packed_data)
+
+
+    except KeyboardInterrupt:
+        # Move to bottom of the scan area for clean exit
+        #sys.stdout.write("\n" * 2)
+        print("Scan stopped by user.")
+    finally:
+        s.sendall(struct.pack('i', -1)) # -1 is exit 
+        s.close() 
+        #ui_show_cursor()
+        sys.stdout.flush()
+
+def lidar_disconnect():
+    if lidar is not None:
+        lidarDisconnect(lidar)
+        
+
+if __name__ == "__main__":
+    lidar_connect() 
+    lidar_scan()
+    lidar_disconnect() 

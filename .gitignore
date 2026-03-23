@@ -1,3 +1,5 @@
 pat.txt
 backup
 ignore
+*__pycache__
+*.pyc
