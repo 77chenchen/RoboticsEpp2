@@ -96,7 +96,7 @@ volatile bool   stateChanged = false;
 // =============================================================
 
 // Pin mapping using your current bare-metal ports:
-// PD0 -> sensor OUT
+// PK0 -> sensor OUT
 // PJ0 -> S0
 // PJ1 -> S1
 // PH0 -> S2
@@ -249,7 +249,7 @@ void setup() {
     
     // Color Sensor
     // PD0 = OUT from TCS3200 -> input
-    DDRD &= ~(1 << DDD0);
+    DDRK &= ~(1 << DDK0);
 
     // PJ0 = S0, PJ1 = S1 -> outputs
     DDRJ |= (1 << DDJ0) | (1 << DDJ1);
