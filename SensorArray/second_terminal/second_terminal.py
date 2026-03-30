@@ -46,6 +46,9 @@ import struct
 import sys
 import time
 
+from pathlib import Path 
+sys.path.insert(1, str(Path(__file__).parent.parent))
+
 # net_utils is imported with an absolute import because this script is designed
 # to be run directly (python3 second_terminal/second_terminal.py), which adds
 # this file's directory to sys.path automatically.

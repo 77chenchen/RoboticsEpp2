@@ -206,7 +206,8 @@ async def handle_client(reader, writer):
                         for distance in distances:
                             writer.write(struct.pack('f', distance))
                         await writer.drain()
-                        print(f"  Sent scan round {count} measurements for LIDAR {lidar_id}")
+                        # don't print anymore to save compute & not clog logs 
+                        #print(f"  Sent scan round {count} measurements for LIDAR {lidar_id}")
                     except StopIteration:
                         # Generator exhausted
                         writer.write(struct.pack('b', 0))
