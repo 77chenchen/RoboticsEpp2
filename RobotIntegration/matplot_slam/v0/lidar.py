@@ -108,8 +108,8 @@ async def _connect_async(port=LIDAR_PORT, baudrate=LIDAR_BAUD):
         
         # Read response: success flag (1 byte) + lidar_id (4 bytes)
         response = await _reader.readexactly(5)
-        success = struct.unpack('b', response[0:1])[0]
-        lidar_id = struct.unpack('i', response[1:5])[0]
+        success = struct.unpack('<b', response[0:1])[0]
+        lidar_id = struct.unpack('<i', response[1:5])[0]
         
         if success:
             _client_log(f'[lidar] Connected successfully, LIDAR ID: {lidar_id}')

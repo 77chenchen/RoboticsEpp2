@@ -12,3 +12,11 @@
 [2026-03-23 16:56:11] STATUS: RIGHT AFT CONNECTING
 [2026-03-23 16:56:11] STATUS: None
 [2026-03-23 16:56:11] ERROR: Could not connect to LIDAR on /dev/ttyUSB0
+[2026-03-30 14:20:43] STATUS: RIGHT BEF CONNECTING
+[2026-03-30 14:20:43] [lidar] connect request port=/dev/ttyUSB0 baudrate=115200
+[2026-03-30 14:20:43] Connected to LIDAR server at 100.109.145.53:12345
+[2026-03-30 14:20:45] [lidar] Connected successfully, LIDAR ID: 16777216
+[2026-03-30 14:20:45] STATUS: RIGHT AFT CONNECTING
+[2026-03-30 14:20:45] STATUS: 16777216
+[2026-03-30 14:20:45] [lidar] Failed to get scan mode for LIDAR 16777216, using default mode 2
+[2026-03-30 14:20:45] STATUS: connected (mode 2)

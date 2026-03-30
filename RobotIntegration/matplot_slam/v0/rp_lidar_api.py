@@ -147,10 +147,10 @@ async def handle_client(reader, writer):
                     next_lidar_id += 1
                     lidar_instances[lidar_id] = lidar
                     client_lidar_id = lidar_id
-                    response = struct.pack('bi', 1, lidar_id)  # success flag + lidar_id
+                    response = struct.pack('<bi', 1, lidar_id)  # success flag + lidar_id
                     print(f"  Connected LIDAR {lidar_id}")
                 else:
-                    response = struct.pack('bi', 0, -1)  # failure
+                    response = struct.pack('<bi', 0, -1)  # failure
                     print(f"  Failed to connect LIDAR")
                 writer.write(response)
                 await writer.drain()
