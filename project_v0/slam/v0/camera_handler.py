@@ -12,7 +12,6 @@ from connection_params import CAMERA_CONNECTION_PARAMS as CONNECTION_PARAMS
 # GLOBAL CONFIGURATION
 # ==============================================================================
 PORT = "/dev/ttyUSB0"
-BAUDRATE = 115200
 
 camera = None 
 
@@ -28,7 +27,6 @@ def camera_capture(): # returns bool of success or not
     assert camera is not None, "Camera has not been connected yet!" 
 
 
-    #lidar = lidarConnect(port=PORT, baudrate=BAUDRATE, wait=2)
     s = socket.socket()
     s.connect(CONNECTION_PARAMS) 
 
@@ -44,12 +42,18 @@ def camera_capture(): # returns bool of success or not
         retval = True 
 
 
+    except (BrokenPipeError, ConnectionResetError, OSError) as e:
+        print(f"Socket send failed: {e}")
     except KeyboardInterrupt:
         # Move to bottom of the scan area for clean exit
         #sys.stdout.write("\n" * 2)
         print("Scan stopped by user.")
     finally:
-        s.sendall(b'\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF') #struct.pack('!II', 4294967295, 4294967295)) # -1, -1 is exit 
+        try:
+            s.sendall(b'\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF') #struct.pack('!II', 4294967295, 4294967295)) # -1, -1 is exit
+        except OSError:
+            # Peer may already be closed.
+            pass
         s.close() 
         #ui_show_cursor()
         sys.stdout.flush()

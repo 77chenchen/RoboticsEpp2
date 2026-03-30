@@ -18,6 +18,7 @@ import asyncio
 
 async def handle_client(reader, writer):
     addr = writer.get_extra_info('peername')
+    window_name = str(addr)
     print(f"Connected by {addr}")
 
 
@@ -30,11 +31,11 @@ async def handle_client(reader, writer):
                 break # client quit 
             img_height, img_width = struct.unpack('!II', size_data)
 
-            img_data = size_data.readexactly(8*img_height*img_width ) 
+            img_data = await reader.readexactly(img_height * img_width)
 
             img = np.frombuffer(img_data, dtype=np.uint8).reshape((img_height, img_width))
 
-            cv2.imshow(addr, img)
+            cv2.imshow(window_name, img)
             cv2.waitKey(1)
 
             
@@ -47,7 +48,7 @@ async def handle_client(reader, writer):
         writer.close()
         await writer.wait_closed()
         cv2.waitKey(0)
-        cv2.destroyWindow(addr) 
+        cv2.destroyWindow(window_name) 
 
 async def main():
     server = await asyncio.start_server(
