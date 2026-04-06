@@ -6,18 +6,17 @@ Usage (from inside the slam/ directory):
     source ../env/bin/activate
     python3 slam.py
 
-The SLAM visualiser connects to the RPLidar, builds an occupancy map using
-BreezySLAM, and displays it as a colour Unicode block-character grid in the
-terminal.  The map updates continuously as the robot moves.
+The SLAM visualiser connects to the LIDAR source, builds an occupancy map
+using BreezySLAM, and displays it in a windowed custom UI.
 
-Settings are in settings.py.  Edit that file to change the LIDAR port,
-map size, scan quality, or display options.
+Settings are in settings.py. Edit that file to change map size, scan quality,
+or display options.
 
 Requirements
 ------------
-    pyrplidar  - installed by setup_environment.sh (Sensor Mini-Project)
-    breezyslam - installed by install_slam.sh (this studio)
-    textual    - installed by install_slam.sh (this studio)
+    pyrplidar   - installed by setup_environment.sh (Sensor Mini-Project)
+    breezyslam  - installed by install_slam.sh (this studio)
+    matplotlib  - required for the custom UI
 """
 
 import sys
@@ -27,7 +26,7 @@ import os
 # (e.g. 'import settings') work correctly when the file is run as a script.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from ui import run
+from ui_custom import run
 
 if __name__ == '__main__':
     run()

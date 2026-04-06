@@ -583,7 +583,7 @@ class SlamApp(App[None]):
             f'[{_STYLE_FREE_CLEAR}]{_GLYPH_FREE_CLEAR} free[/]  '
             f'[{_STYLE_ROBOT}]\u25c9 robot[/]  |  '
             'Map: +/- zoom  1-5 jump  arrows/hjkl pan  t center  p pause  |  '
-            'Sensor: e estop  c color  P camera  wfwd a<-left d-right-> s<-back x stop  []speed  q quit'
+            'Sensor: e estop  c color  f camera  wfwd a<-left d-right-> s<-back x stop  []speed  q quit'
         )
 
 

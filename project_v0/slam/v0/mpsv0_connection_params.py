@@ -3,8 +3,10 @@
 #client_lidar_port = 12345
 
 # server is the raspberry pi 
-server_IP = '100.109.145.53' 
-server_lidar_port = 12345 
+import os
+
+server_IP = os.getenv('MPSV0_SERVER_IP', '100.109.145.53')
+server_lidar_port = int(os.getenv('MPSV0_SERVER_PORT', '12345'))
 
 
 # command types 
@@ -23,6 +25,7 @@ CMD_SENSOR_GET_COLOR = 9
 CMD_SENSOR_DRIVE = 10
 CMD_SENSOR_SET_SPEED = 11
 CMD_SENSOR_CAMERA_CAPTURE = 12
+CMD_SENSOR_ARM_TEXT = 13
 
 CMD_QUIT = -1
 

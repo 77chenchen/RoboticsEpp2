@@ -28,7 +28,7 @@ from typing import Optional
 from settings import (
     SCAN_SIZE, SCAN_RATE_HZ, DETECTION_ANGLE, MAX_DISTANCE_MM,
     MAP_SIZE_PIXELS, MAP_SIZE_METERS, HOLE_WIDTH_MM, MAP_QUALITY,
-    LIDAR_OFFSET_DEG, MIN_VALID_POINTS, INITIAL_ROUNDS_SKIP,
+    LIDAR_OFFSET_DEG, LIDAR_ANGLE_SIGN, MIN_VALID_POINTS, INITIAL_ROUNDS_SKIP,
     MAP_UPDATE_INTERVAL,
 )
 from shared_state import ProcessSharedState
@@ -72,9 +72,9 @@ def _resample_scan(
     for angle, dist in zip(raw_angles, raw_distances):
         if dist <= 0:
             continue
-        # Negate to convert from RPLidar CW to BreezySLAM CCW convention,
-        # then apply the mounting offset.
-        ccw_angle = -angle + LIDAR_OFFSET_DEG
+        # Convert from raw sensor angle convention to BreezySLAM CCW,
+        # then apply mounting offset.
+        ccw_angle = (LIDAR_ANGLE_SIGN * angle) + LIDAR_OFFSET_DEG
         bin_idx = int(round(ccw_angle)) % SCAN_SIZE
         bin_sums[bin_idx] += dist
         bin_counts[bin_idx] += 1

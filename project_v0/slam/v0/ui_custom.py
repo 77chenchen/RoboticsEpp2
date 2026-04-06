@@ -1,0 +1,517 @@
+#!/usr/bin/env python3
+"""
+ui_custom.py - Windowed SLAM UI (non-terminal).
+
+Features:
+  - Live occupancy-map rendering in a matplotlib window.
+  - Robot position + heading arrow for clearer direction.
+  - Color sensing stamps: each manual color read places a dot on map.
+  - Keyboard controls for movement/speed/estop/camera/pause.
+  - Robot arm text command entry (X000 format, e.g. B090, S110, E080, G095, V020, H).
+"""
+
+from __future__ import annotations
+
+import multiprocessing
+import math
+import time
+
+import numpy as np
+
+from settings import MAP_SIZE_PIXELS, MAP_SIZE_METERS, UI_REFRESH_HZ
+from shared_state import ProcessSharedState
+from slam_process import run_slam_process
+import lidar
+
+
+class SlamCustomUI:
+    def __init__(self):
+        self.pss = ProcessSharedState()
+        self.slam_proc = multiprocessing.Process(
+            target=run_slam_process,
+            args=(self.pss,),
+            name='slam-process',
+            daemon=True,
+        )
+
+        self._last_map_version = -1
+        self._last_pose_version = -1
+        self._status_msg = 'starting...'
+        self._camera_count = 0
+
+        # Color stamps in map pixel coordinates.
+        self._red_points = []
+        self._green_points = []
+        self._blue_points = []
+
+        self._motor_speed = 150
+        self._display_rotation_deg = 0.0
+        self._last_rotation_deg = None
+
+        n = MAP_SIZE_PIXELS - 1
+        self._view_center_x = n / 2.0
+        self._view_center_y = n / 2.0
+        self._zoom_levels_px = [n / 2.0, n / 3.0, n / 5.0, n / 8.0]
+        self._zoom_idx = 1
+
+        self._fig = None
+        self._ax_map = None
+        self._ax_info = None
+        self._img_artist = None
+        self._robot_point = None
+        self._robot_arrow = None
+        self._red_scatter = None
+        self._green_scatter = None
+        self._blue_scatter = None
+        self._info_text = None
+        self._arm_box = None
+        self._timer = None
+
+    def _snapshot(self):
+        error = self.pss.get_error()
+        return {
+            'mapbytes': bytes(self.pss.shm.buf),
+            'x_mm': self.pss.x_mm.value,
+            'y_mm': self.pss.y_mm.value,
+            'theta_deg': self.pss.theta_deg.value,
+            'valid_points': self.pss.valid_points.value,
+            'status_note': self.pss.get_status(),
+            'rounds_seen': self.pss.rounds_seen.value,
+            'map_version': self.pss.map_version.value,
+            'pose_version': self.pss.pose_version.value,
+            'connected': self.pss.connected.value,
+            'paused': self.pss.paused.value,
+            'stopped': self.pss.stopped.value,
+            'error_message': error if error else None,
+        }
+
+    @staticmethod
+    def _map_image_from_bytes(mapbytes: bytes) -> np.ndarray:
+        arr = np.frombuffer(mapbytes, dtype=np.uint8).reshape(MAP_SIZE_PIXELS, MAP_SIZE_PIXELS)
+        # Display with x to the right and y upward (north-up map view).
+        arr = np.flipud(arr)
+        return arr
+
+    @staticmethod
+    def _mm_to_display_px(x_mm: float, y_mm: float) -> tuple[float, float]:
+        px_per_mm = MAP_SIZE_PIXELS / (MAP_SIZE_METERS * 1000.0)
+        col = x_mm * px_per_mm
+        row = (MAP_SIZE_PIXELS - 1) - (y_mm * px_per_mm)
+        return col, row
+
+    @staticmethod
+    def _rotate_display_point(px: float, py: float, quarter_turns: int) -> tuple[float, float]:
+        n = MAP_SIZE_PIXELS - 1
+        cx = n / 2.0
+        cy = n / 2.0
+        theta = math.radians(quarter_turns)
+        dx = px - cx
+        dy = py - cy
+        rx = cx + (math.cos(theta) * dx) - (math.sin(theta) * dy)
+        ry = cy + (math.sin(theta) * dx) + (math.cos(theta) * dy)
+        return rx, ry
+
+    @staticmethod
+    def _estimate_wall_angle_deg(mapbytes: bytes):
+        """Estimate dominant wall direction in degrees modulo 180.
+
+        Returns angle where 0 means walls mostly horizontal in image-space,
+        90 means mostly vertical.
+        """
+        img = SlamCustomUI._map_image_from_bytes(mapbytes)
+        wall = (img < 90).astype(np.float32)
+        if float(wall.sum()) < 500.0:
+            return None
+
+        gy, gx = np.gradient(wall)
+        mag = np.hypot(gx, gy)
+        mask = mag > 0.12
+        if int(mask.sum()) < 300:
+            return None
+
+        # Gradient direction is wall normal; add 90 deg to get wall direction.
+        normal_deg = np.degrees(np.arctan2(gy[mask], gx[mask]))
+        wall_deg = (normal_deg + 90.0) % 180.0
+        w = mag[mask]
+
+        # Circular mean on doubled angle for 180-degree periodicity.
+        ang2 = np.radians(wall_deg * 2.0)
+        c = float(np.sum(w * np.cos(ang2)))
+        s = float(np.sum(w * np.sin(ang2)))
+        if abs(c) < 1e-9 and abs(s) < 1e-9:
+            return None
+        mean = (math.degrees(math.atan2(s, c)) / 2.0) % 180.0
+        return mean
+
+    def _rezero_display_orientation(self):
+        snap = self._snapshot()
+        wall_angle = self._estimate_wall_angle_deg(snap['mapbytes'])
+        if wall_angle is None:
+            self._status_msg = '[VIEW] re-zero failed: not enough wall structure yet'
+            return
+
+        # Rotate display so dominant wall angle snaps to nearest room axis.
+        nearest_axis = round(-wall_angle / 90.0) * 90.0
+        self._display_rotation_deg = nearest_axis - wall_angle
+        self._last_map_version = -1
+        self._last_rotation_deg = None
+        self._status_msg = (
+            f'[VIEW] wall re-zero: wall={wall_angle:.1f} deg, '
+            f'corr={self._display_rotation_deg:+.1f} deg'
+        )
+
+    def _clamp_view_center(self):
+        n = MAP_SIZE_PIXELS - 1
+        half = self._zoom_levels_px[self._zoom_idx]
+        self._view_center_x = max(half, min(n - half, self._view_center_x))
+        self._view_center_y = max(half, min(n - half, self._view_center_y))
+
+    def _apply_view_window(self):
+        self._clamp_view_center()
+        half = self._zoom_levels_px[self._zoom_idx]
+        cx = self._view_center_x
+        cy = self._view_center_y
+        # Keep x-axis mirrored as requested earlier.
+        self._ax_map.set_xlim(cx + half, cx - half)
+        self._ax_map.set_ylim(cy + half, cy - half)
+
+    def _pan_view(self, dx_px: float, dy_px: float):
+        self._view_center_x += dx_px
+        self._view_center_y += dy_px
+        self._apply_view_window()
+
+    def _zoom_view(self, delta: int):
+        old_idx = self._zoom_idx
+        self._zoom_idx = max(0, min(len(self._zoom_levels_px) - 1, self._zoom_idx + delta))
+        if self._zoom_idx != old_idx:
+            self._apply_view_window()
+
+    def _nudge_alignment(self, delta_deg: float):
+        self._display_rotation_deg += delta_deg
+        self._last_rotation_deg = None
+        self._status_msg = f'[VIEW] manual align {self._display_rotation_deg:+.1f} deg'
+
+    def _go_home_view(self):
+        n = MAP_SIZE_PIXELS - 1
+        self._view_center_x = n / 2.0
+        self._view_center_y = n / 2.0
+        self._zoom_idx = 1
+        self._display_rotation_deg = 0.0
+        self._last_rotation_deg = None
+        self._apply_view_window()
+        self._status_msg = '[VIEW] home'
+
+    @staticmethod
+    def _classify_color(r: int, g: int, b: int) -> str:
+        # Frequency-based sensor: often lower freq means stronger reflected channel.
+        vals = {'red': r, 'green': g, 'blue': b}
+        return min(vals, key=vals.get)
+
+    def _stamp_color_at_robot(self, color_name: str, x_mm: float, y_mm: float):
+        px, py = self._mm_to_display_px(x_mm, y_mm)
+        point = (float(px), float(py))
+        if color_name == 'red':
+            self._red_points.append(point)
+        elif color_name == 'green':
+            self._green_points.append(point)
+        elif color_name == 'blue':
+            self._blue_points.append(point)
+
+    @staticmethod
+    def _points_to_xy(points):
+        if not points:
+            return [], []
+        xs = [p[0] for p in points]
+        ys = [p[1] for p in points]
+        return xs, ys
+
+    def _handle_key(self, event):
+        key = (event.key or '').lower()
+        if not key:
+            return
+
+        if key == 'q':
+            self._status_msg = 'quitting...'
+            self._shutdown()
+            return
+
+        if key == 'o':
+            self._rezero_display_orientation()
+            return
+
+        if key == 'h':
+            self._go_home_view()
+            return
+
+        if key == 'j':
+            self._nudge_alignment(+1.0)
+            return
+
+        if key == 'l':
+            self._nudge_alignment(-1.0)
+            return
+
+        if key == 'i':
+            self._zoom_view(+1)
+            self._status_msg = f'[VIEW] zoom {self._zoom_idx + 1}/{len(self._zoom_levels_px)}'
+            return
+
+        if key == 'k':
+            self._zoom_view(-1)
+            self._status_msg = f'[VIEW] zoom {self._zoom_idx + 1}/{len(self._zoom_levels_px)}'
+            return
+
+        pan_step = max(20.0, self._zoom_levels_px[self._zoom_idx] * 0.20)
+        if key == 'left':
+            self._pan_view(+pan_step, 0.0)
+            self._status_msg = '[VIEW] pan left'
+            return
+        if key == 'right':
+            self._pan_view(-pan_step, 0.0)
+            self._status_msg = '[VIEW] pan right'
+            return
+        if key == 'up':
+            self._pan_view(0.0, -pan_step)
+            self._status_msg = '[VIEW] pan up'
+            return
+        if key == 'down':
+            self._pan_view(0.0, +pan_step)
+            self._status_msg = '[VIEW] pan down'
+            return
+
+        if key == 'p':
+            self.pss.paused.value = not self.pss.paused.value
+            self._status_msg = 'paused' if self.pss.paused.value else 'resumed'
+            return
+
+        if key == 'e':
+            ok = lidar.sensor_estop()
+            self._status_msg = '[E-STOP] sent' if ok else '[E-STOP] failed'
+            return
+
+        if key == 'f':
+            ok = lidar.sensor_camera_capture()
+            if ok:
+                self._camera_count += 1
+            self._status_msg = '[CAMERA] captured' if ok else '[CAMERA] failed'
+            return
+
+        if key == 'c':
+            rgb = lidar.sensor_get_color()
+            if rgb:
+                r, g, b = int(rgb[0]), int(rgb[1]), int(rgb[2])
+                snap = self._snapshot()
+                color_name = self._classify_color(r, g, b)
+                self._stamp_color_at_robot(color_name, snap['x_mm'], snap['y_mm'])
+                self._status_msg = f'[COLOR] R={r} G={g} B={b} -> {color_name} dot placed'
+            else:
+                self._status_msg = '[COLOR] read failed'
+            return
+
+        if key == 'w':
+            ok = lidar.sensor_forward()
+            self._status_msg = '[DRIVE] forward' if ok else '[DRIVE] forward failed'
+            return
+        if key == 's':
+            ok = lidar.sensor_backward()
+            self._status_msg = '[DRIVE] backward' if ok else '[DRIVE] backward failed'
+            return
+        if key == 'a':
+            ok = lidar.sensor_left()
+            self._status_msg = '[DRIVE] left' if ok else '[DRIVE] left failed'
+            return
+        if key == 'd':
+            ok = lidar.sensor_right()
+            self._status_msg = '[DRIVE] right' if ok else '[DRIVE] right failed'
+            return
+        if key == 'x':
+            ok = lidar.sensor_stop()
+            self._status_msg = '[DRIVE] stop' if ok else '[DRIVE] stop failed'
+            return
+
+        if key == '[':
+            self._motor_speed = max(0, self._motor_speed - 20)
+            ok = lidar.sensor_set_speed(self._motor_speed)
+            self._status_msg = f'[SPEED] {self._motor_speed}' if ok else '[SPEED] failed'
+            return
+        if key == ']':
+            self._motor_speed = min(255, self._motor_speed + 20)
+            ok = lidar.sensor_set_speed(self._motor_speed)
+            self._status_msg = f'[SPEED] {self._motor_speed}' if ok else '[SPEED] failed'
+            return
+
+    def _handle_arm_submit(self, text):
+        cmd = (text or '').strip().upper()
+        if not cmd:
+            self._status_msg = '[ARM] empty command'
+            return
+        ok = lidar.sensor_arm_text(cmd)
+        self._status_msg = f'[ARM] {cmd} sent' if ok else f'[ARM] {cmd} failed'
+        try:
+            # Clear field after submit for faster repeated entries.
+            self._arm_box.set_val('')
+        except Exception:
+            pass
+
+    def _refresh(self):
+        snap = self._snapshot()
+
+        if snap['map_version'] != self._last_map_version:
+            img = self._map_image_from_bytes(snap['mapbytes'])
+            self._img_artist.set_data(img)
+            self._last_map_version = snap['map_version']
+
+        if self._last_rotation_deg != self._display_rotation_deg:
+            from matplotlib.transforms import Affine2D
+            n = MAP_SIZE_PIXELS - 1
+            cx = n / 2.0
+            cy = n / 2.0
+            tr = Affine2D().rotate_deg_around(cx, cy, self._display_rotation_deg)
+            self._img_artist.set_transform(tr + self._ax_map.transData)
+            self._last_rotation_deg = self._display_rotation_deg
+
+        if snap['pose_version'] != self._last_pose_version:
+            px, py = self._mm_to_display_px(snap['x_mm'], snap['y_mm'])
+            px, py = self._rotate_display_point(px, py, self._display_rotation_deg)
+            self._robot_point.set_data([px], [py])
+
+            # theta_deg is CCW from +x; invert y for screen coordinates.
+            heading = math.radians(snap['theta_deg'] - self._display_rotation_deg)
+            u = 40.0 * math.cos(heading)
+            v = -40.0 * math.sin(heading)
+            self._robot_arrow.set_offsets(np.array([[px, py]]))
+            self._robot_arrow.set_UVC(np.array([u]), np.array([v]))
+            self._last_pose_version = snap['pose_version']
+
+        rx, ry = self._points_to_xy(self._red_points)
+        gx, gy = self._points_to_xy(self._green_points)
+        bx, by = self._points_to_xy(self._blue_points)
+        if abs(self._display_rotation_deg) > 1e-6:
+            red_points = [self._rotate_display_point(x, y, self._display_rotation_deg) for x, y in self._red_points]
+            green_points = [self._rotate_display_point(x, y, self._display_rotation_deg) for x, y in self._green_points]
+            blue_points = [self._rotate_display_point(x, y, self._display_rotation_deg) for x, y in self._blue_points]
+            rx, ry = self._points_to_xy(red_points)
+            gx, gy = self._points_to_xy(green_points)
+            bx, by = self._points_to_xy(blue_points)
+        self._red_scatter.set_offsets(np.column_stack([rx, ry]) if rx else np.empty((0, 2)))
+        self._green_scatter.set_offsets(np.column_stack([gx, gy]) if gx else np.empty((0, 2)))
+        self._blue_scatter.set_offsets(np.column_stack([bx, by]) if bx else np.empty((0, 2)))
+
+        state = 'PAUSED' if snap['paused'] else 'LIVE'
+        if snap['error_message']:
+            state = 'ERROR'
+        elif snap['stopped'] and not snap['connected']:
+            state = 'STOPPED'
+
+        info = (
+            f"State: {state}\n"
+            f"Pose: x={snap['x_mm']:.0f} mm  y={snap['y_mm']:.0f} mm  th={snap['theta_deg']:+.1f} deg\n"
+            f"Rounds: {snap['rounds_seen']}  Valid points: {snap['valid_points']}\n"
+            f"View: zoom {self._zoom_idx + 1}/{len(self._zoom_levels_px)}  center=({self._view_center_x:.0f}, {self._view_center_y:.0f}) px\n"
+            f"View rotation: {self._display_rotation_deg:+.1f} deg (O wall re-zero, J/L nudge, H home)\n"
+            f"Camera captures: {self._camera_count}\n"
+            f"Color dots: R={len(self._red_points)} G={len(self._green_points)} B={len(self._blue_points)}\n"
+            f"SLAM: {snap['status_note']}\n"
+            f"Action: {self._status_msg}\n\n"
+            f"Keys: WASD move, X stop, [] speed, C color, F camera, E estop, P pause\n"
+            f"View keys: Arrows pan, I zoom in, K zoom out, O wall re-zero, J/L align nudge, H home, Q quit\n"
+            f"Arm: type X000 in box (B090/S110/E080/G095/V020 or H)"
+        )
+        if snap['error_message']:
+            info += f"\nError: {snap['error_message']}"
+
+        self._info_text.set_text(info)
+        self._fig.canvas.draw_idle()
+
+    def _shutdown(self):
+        try:
+            if self._timer is not None:
+                self._timer.stop()
+        except Exception:
+            pass
+
+        try:
+            lidar.sensor_serial_disconnect()
+        except Exception:
+            pass
+
+        self.pss.stop_event.set()
+        if self.slam_proc.is_alive():
+            self.slam_proc.join(timeout=3.0)
+        if self.slam_proc.is_alive():
+            self.slam_proc.terminate()
+        self.pss.cleanup()
+
+        try:
+            import matplotlib.pyplot as plt
+            plt.close('all')
+        except Exception:
+            pass
+
+    def run(self):
+        try:
+            import matplotlib.pyplot as plt
+            from matplotlib.widgets import TextBox
+        except ImportError:
+            print('[slam] ERROR: matplotlib is not installed.')
+            print('Install it in your environment, then run slam.py again.')
+            raise SystemExit(1)
+
+        # Prevent matplotlib's default shortcuts from stealing the keys we use
+        # for robot control in this UI window.
+        plt.rcParams['keymap.save'] = []
+        plt.rcParams['keymap.fullscreen'] = []
+
+        self.slam_proc.start()
+        try:
+            lidar.sensor_serial_connect()
+        except Exception:
+            # SLAM map should still run even if sensor API side is unavailable.
+            self._status_msg = 'sensor serial connect failed (map still running)'
+
+        self._fig = plt.figure(figsize=(12, 10))
+        self._fig.canvas.manager.set_window_title('SLAM Custom UI')
+        gs = self._fig.add_gridspec(3, 1, height_ratios=[18, 5, 2])
+
+        self._ax_map = self._fig.add_subplot(gs[0, 0])
+        self._ax_info = self._fig.add_subplot(gs[1, 0])
+        ax_arm = self._fig.add_subplot(gs[2, 0])
+
+        self._ax_map.set_title('Occupancy Map')
+        self._ax_map.set_xlim(MAP_SIZE_PIXELS - 1, 0)
+        self._ax_map.set_ylim(MAP_SIZE_PIXELS - 1, 0)
+        self._ax_map.set_aspect('equal', adjustable='box')
+
+        init_img = np.full((MAP_SIZE_PIXELS, MAP_SIZE_PIXELS), 127, dtype=np.uint8)
+        self._img_artist = self._ax_map.imshow(init_img, cmap='gray', vmin=0, vmax=255, origin='upper')
+
+        self._robot_point, = self._ax_map.plot([], [], marker='o', color='cyan', markersize=8)
+        self._robot_arrow = self._ax_map.quiver([0], [0], [0], [0], color='cyan', scale_units='xy', scale=1)
+
+        self._red_scatter = self._ax_map.scatter([], [], c='red', s=20, label='Red')
+        self._green_scatter = self._ax_map.scatter([], [], c='lime', s=20, label='Green')
+        self._blue_scatter = self._ax_map.scatter([], [], c='blue', s=20, label='Blue')
+        self._ax_map.legend(loc='upper right', fontsize=8)
+
+        self._ax_info.axis('off')
+        self._info_text = self._ax_info.text(0.0, 1.0, '', va='top', family='monospace', fontsize=9)
+
+        ax_arm.set_title('Robot Arm Command (X000 format)', fontsize=10)
+        self._arm_box = TextBox(ax_arm, 'Arm Cmd: ', initial='')
+        self._arm_box.on_submit(self._handle_arm_submit)
+
+        self._fig.canvas.mpl_connect('key_press_event', self._handle_key)
+        self._fig.canvas.mpl_connect('close_event', lambda evt: self._shutdown())
+
+        self._timer = self._fig.canvas.new_timer(interval=max(20, int(1000 / UI_REFRESH_HZ)))
+        self._timer.add_callback(self._refresh)
+        self._timer.start()
+
+        self._apply_view_window()
+        self._refresh()
+        plt.tight_layout()
+        plt.show()
+
+
+def run() -> None:
+    SlamCustomUI().run()

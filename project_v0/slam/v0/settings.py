@@ -63,6 +63,8 @@ MAX_DISTANCE_MM = 12000
 #
 # The raw RPLidar angles (clockwise) are first negated to convert to the
 # counter-clockwise convention used by BreezySLAM, then this offset is added.
+# If your heading appears mirrored (left turn shown as right), set
+# LIDAR_ANGLE_SIGN = +1 to disable negation.
 #
 # Direction convention (counter-clockwise, viewed from above):
 #   LIDAR_OFFSET_DEG = 0    - LIDAR forward (0 deg) = robot forward
@@ -76,6 +78,11 @@ MAX_DISTANCE_MM = 12000
 #
 # The default of 0 assumes the LIDAR's forward direction matches the robot's.
 LIDAR_OFFSET_DEG = 0
+
+# Sign used when converting raw scan angles into BreezySLAM's CCW convention.
+# Default -1 assumes raw angles increase clockwise (RPLidar default).
+# Set to +1 if your angle source is already CCW.
+LIDAR_ANGLE_SIGN = +1
 
 # ===========================================================================
 # Scan quality thresholds

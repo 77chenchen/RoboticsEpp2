@@ -249,6 +249,34 @@ def _ensure_camera_connected():
         return False
 
 
+def _parse_arm_text_command(text):
+    if not isinstance(text, str):
+        return None
+    cmd = text.strip().upper()
+    if not cmd:
+        return None
+
+    if cmd == 'H':
+        return COMMAND_ARM_HOME, None
+
+    if len(cmd) != 4 or not cmd[1:].isdigit():
+        return None
+
+    key = cmd[0]
+    value = int(cmd[1:])
+    mapping = {
+        'B': COMMAND_ARM_BASE,
+        'S': COMMAND_ARM_SHOULDER,
+        'E': COMMAND_ARM_ELBOW,
+        'G': COMMAND_ARM_GRIPPER,
+        'V': COMMAND_ARM_SET_SPEED,
+    }
+    pkt_cmd = mapping.get(key)
+    if pkt_cmd is None:
+        return None
+    return pkt_cmd, value
+
+
 
 
 # api handler 
@@ -495,6 +523,27 @@ async def handle_client(reader, writer):
                 if ok:
                     _frames_remaining -= 1
 
+                writer.write(struct.pack('b', 1 if ok else 0))
+                await writer.drain()
+
+            elif command == net_params.CMD_SENSOR_ARM_TEXT:
+                cmd_len = struct.unpack('i', await reader.readexactly(4))[0]
+                cmd_text = (await reader.readexactly(cmd_len)).decode('utf-8', errors='replace')
+
+                parsed = _parse_arm_text_command(cmd_text)
+                if parsed is None or _is_estop_active():
+                    writer.write(struct.pack('b', 0))
+                    await writer.drain()
+                    continue
+
+                pkt_cmd, value = parsed
+                if value is None:
+                    ok = _send_sensor_command(pkt_cmd)
+                else:
+                    ok = _send_sensor_command(pkt_cmd, params=[value] + [0] * (PARAMS_COUNT - 1))
+
+                if ok:
+                    _await_response(expected_cmd=None, timeout_sec=0.5)
                 writer.write(struct.pack('b', 1 if ok else 0))
                 await writer.drain()
 

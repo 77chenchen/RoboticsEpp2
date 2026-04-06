@@ -307,6 +307,16 @@ async def _sensor_camera_capture_async():
         return False
 
 
+async def _sensor_arm_text_async(text_cmd):
+    try:
+        await _send_command(net_params.CMD_SENSOR_ARM_TEXT, str(text_cmd))
+        response = await _reader.readexactly(1)
+        return bool(struct.unpack('b', response)[0])
+    except Exception as e:
+        _client_log(f"[sensor] Arm text command failed: {e}")
+        return False
+
+
 # ============================================================================
 # PUBLIC SYNCHRONOUS API (100% compatible with original interface)
 # ============================================================================
@@ -419,5 +429,25 @@ def sensor_set_speed(speed):
 def sensor_camera_capture():
     """Capture and forward one camera frame using camera_handler."""
     return _run_in_background_loop(_sensor_camera_capture_async())
+
+
+def sensor_arm_text(text_cmd):
+    """Send arm command in X000 form, where X in {B,S,E,G,H,V}."""
+    if not isinstance(text_cmd, str):
+        return False
+    cmd = text_cmd.strip().upper()
+    if not cmd:
+        return False
+
+    if len(cmd) == 1:
+        return _run_in_background_loop(_sensor_arm_text_async(cmd))
+
+    if len(cmd) != 4:
+        return False
+    if cmd[0] not in {'B', 'S', 'E', 'G', 'V'}:
+        return False
+    if not cmd[1:].isdigit():
+        return False
+    return _run_in_background_loop(_sensor_arm_text_async(cmd))
 
 
