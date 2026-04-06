@@ -134,11 +134,16 @@ static void sendArmStatus() {
     memset(&pkt, 0, sizeof(pkt));
     pkt.packetType = PACKET_TYPE_RESPONSE;
     pkt.command = RESP_ARM_STATUS;
-    pkt.params[0] = armTarget[ARM_JOINT_BASE];
-    pkt.params[1] = armTarget[ARM_JOINT_SHOULDER];
-    pkt.params[2] = armTarget[ARM_JOINT_ELBOW];
-    pkt.params[3] = armTarget[ARM_JOINT_GRIPPER];
+  // params[0..3] are actual servo positions, params[5..8] are targets.
+  pkt.params[0] = armPos[ARM_JOINT_BASE];
+  pkt.params[1] = armPos[ARM_JOINT_SHOULDER];
+  pkt.params[2] = armPos[ARM_JOINT_ELBOW];
+  pkt.params[3] = armPos[ARM_JOINT_GRIPPER];
     pkt.params[4] = armMsPerDeg;
+  pkt.params[5] = armTarget[ARM_JOINT_BASE];
+  pkt.params[6] = armTarget[ARM_JOINT_SHOULDER];
+  pkt.params[7] = armTarget[ARM_JOINT_ELBOW];
+  pkt.params[8] = armTarget[ARM_JOINT_GRIPPER];
     sendFrame(&pkt);
 }
 
@@ -167,6 +172,11 @@ static bool armApplyTarget(uint8_t joint, uint32_t value, uint8_t minV, uint8_t 
     return false;
   }
   armTarget[joint] = (uint8_t)value;
+  // Debug mode: apply the command immediately to isolate motion-loop issues
+  // from physical servo channel issues.
+  armPos[joint] = armTarget[joint];
+  armServos[joint].write(armPos[joint]);
+  armLastUpdate[joint] = millis();
   return true;
 }
 
@@ -461,15 +471,7 @@ static void handleCommand(const TPacket *cmd) {
             buttonState  = STATE_STOPPED;
             stateChanged = false;
             sei();
-            {
-                TPacket pkt;
-                memset(&pkt, 0, sizeof(pkt));
-                pkt.packetType = PACKET_TYPE_RESPONSE;
-                pkt.command    = RESP_OK;
-                strncpy(pkt.data, "This is a debug message", sizeof(pkt.data) - 1);
-                pkt.data[sizeof(pkt.data) - 1] = '\0';
-                sendFrame(&pkt);
-            }
+      sendOk();
             sendStatus(STATE_STOPPED);
             stop();
             sendMotorStatus(motorSpeed);
@@ -583,7 +585,6 @@ void setup() {
     // Color Sensor
     INIT_COLOR_SENSOR();
     armInit();
-    sendOkWithMsg("ARM_READY");
     sendArmStatus();
 
 
@@ -614,7 +615,8 @@ void loop() {
 
     // --- 2. Process incoming commands from the Pi ---
     TPacket incoming;
-    if (receiveFrame(&incoming)) {
+    bool frameOk = receiveFrame(&incoming);
+    if (frameOk) {
         handleCommand(&incoming);
     }
 }

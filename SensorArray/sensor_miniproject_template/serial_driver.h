@@ -28,7 +28,7 @@
 // TODO (Activity 1, step 2): change this to 1 once txEnqueue(),
 // rxDequeue(), and both ISRs are implemented and working.
 // =============================================================
-#define USE_BAREMETAL_SERIAL 1
+#define USE_BAREMETAL_SERIAL 0
 
 // =============================================================
 // Circular TX / RX buffers (used when USE_BAREMETAL_SERIAL == 1)
@@ -154,6 +154,7 @@ bool rxDequeue(uint8_t *data, uint8_t len) {
 // Vector: USART0_RX_vect
 // Read UDR0 immediately.  If the buffer is not full, store the byte
 // and advance the write index; otherwise discard it.
+#if USE_BAREMETAL_SERIAL
 ISR(USART0_RX_vect) {
   uint8_t byte = UDR0;  // must read immediately
   uint8_t next = (rx_head + 1) & RX_BUFFER_MASK;
@@ -166,6 +167,7 @@ ISR(USART0_RX_vect) {
   rx_buf[rx_head] = byte;
   rx_head = next;
 }
+#endif
 
 // =============================================================
 // Framing: magic number + XOR checksum (pre-implemented)

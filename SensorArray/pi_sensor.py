@@ -178,14 +178,7 @@ def isEstopActive():
 # ----------------------------------------------------------------
 
 def printPacket(pkt):
-    """Print a received TPacket in human-readable form.
-
-    The 'data' field carries an optional debug string from the Arduino.
-    When non-empty, it is printed automatically so you can embed debug
-    messages in any outgoing TPacket on the Arduino side (set pkt.data to
-    a null-terminated string up to 31 characters before calling sendFrame).
-    This works like Serial.print(), but sends output to the Pi terminal.
-    """
+    """Print a received TPacket in human-readable form."""
     global _estop_state
     ptype = pkt['packetType']
     cmd   = pkt['command']
@@ -224,15 +217,16 @@ def printPacket(pkt):
             elbow = pkt['params'][2]
             gripper = pkt['params'][3]
             speed = pkt['params'][4]
-            print(f"Arm status: B={base} S={shoulder} E={elbow} G={gripper} V={speed}")
+            t_base = pkt['params'][5]
+            t_shoulder = pkt['params'][6]
+            t_elbow = pkt['params'][7]
+            t_gripper = pkt['params'][8]
+            print(
+                f"Arm status: pos(B={base} S={shoulder} E={elbow} G={gripper}) "
+                f"target(B={t_base} S={t_shoulder} E={t_elbow} G={t_gripper}) V={speed}"
+            )
         else:
             print(f"Response: unknown command {cmd}")
-        # Print the optional debug string from the data field.
-        # On the Arduino side, fill pkt.data before calling sendFrame() to
-        # send debug messages to this terminal (similar to Serial.print()).
-        debug = pkt['data'].rstrip(b'\x00').decode('ascii', errors='replace')
-        if debug:
-            print(f"Arduino debug: {debug}")
 
     elif ptype == PACKET_TYPE_MESSAGE:
         msg = pkt['data'].rstrip(b'\x00').decode('ascii', errors='replace')

@@ -159,13 +159,13 @@ def _printPacket(pkt):
             print(f"[robot] Status: {'STOPPED' if _estop_active else 'RUNNING'}")
         elif cmd == RESP_ARM_STATUS:
             b, s, e, g, v = pkt['params'][0:5]
-            print(f"[robot] Arm status: B={b} S={s} E={e} G={g} V={v}")
+            tb, ts, te, tg = pkt['params'][5:9]
+            print(
+                f"[robot] Arm status: pos(B={b} S={s} E={e} G={g}) "
+                f"target(B={tb} S={ts} E={te} G={tg}) V={v}"
+            )
         else:
             print(f"[robot] Response: unknown command {cmd}")
-        # Print any debug string embedded in the data field.
-        debug = pkt['data'].rstrip(b'\x00').decode('ascii', errors='replace')
-        if debug:
-            print(f"[robot] Debug: {debug}")
 
     elif ptype == PACKET_TYPE_MESSAGE:
         msg = pkt['data'].rstrip(b'\x00').decode('ascii', errors='replace')
@@ -210,11 +210,14 @@ def _handleInput(line: str, client: TCPClient):
     tokens = line.split()
     cmd = tokens[0]
     
-    if line == 'e':
+    if cmd == 'e' and len(tokens) == 1:
         frame = _packFrame(PACKET_TYPE_COMMAND, COMMAND_ESTOP,
                            data=TCPDUMP_DEMO_TEXT)
-        sendTPacketFrame(client.sock, frame)
-        print("[second_terminal] Sent: E-STOP with demo text 'secret information'")
+        if sendTPacketFrame(client.sock, frame):
+            print("[second_terminal] Sent: E-STOP with demo text 'secret information'")
+        else:
+            print("[second_terminal] Failed to send E-STOP")
+        return
 
 
     if cmd == 'q':
@@ -324,6 +327,7 @@ def run():
 
     print("[second_terminal] Connected!")
     print("[second_terminal] Commands:")
+    print("  e          estop")
     print("  b <angle>  base")
     print("  s <angle>  shoulder")
     print("  e <angle>  elbow")
