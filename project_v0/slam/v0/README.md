@@ -34,7 +34,7 @@ export SECOND_TERM_HOST=192.168.1.100      # Where second_terminal connects
 
 Or with custom IP:
 ```bash
-export MPSV0_SERVER_IP=127.0.0.1
+set SLAM_SERVER_IP=127.0.0.1
 python reference_rp_lidar_api_sim.py
 ```
 
@@ -44,7 +44,7 @@ python reference_rp_lidar_api_sim.py
 
 Or with custom API server:
 ```bash
-export MPSV0_SERVER_IP=127.0.0.1
+set MPSV0_SERVER_IP=127.0.0.1
 python slam.py
 ```
 
@@ -57,7 +57,7 @@ Note: start `rp_lidar_api.py` (or the simulator) before `slam.py`; otherwise
 
 Or with custom relay host:
 ```bash
-export SECOND_TERM_HOST=127.0.0.1
+set SECOND_TERM_HOST=127.0.0.1
 python second_terminal/second_terminal.py
 ```
 

@@ -30,6 +30,9 @@ except ImportError:
     _second_term_available = False
 
 
+CAMERA_CAPTURE_LIMIT_UI = 10
+
+
 class SlamCustomUI:
     def __init__(self):
         self.pss = ProcessSharedState()
@@ -295,10 +298,17 @@ class SlamCustomUI:
             return
 
         if key == 'f':
+            if self._camera_count >= CAMERA_CAPTURE_LIMIT_UI:
+                self._status_msg = f'[CAMERA] limit reached ({CAMERA_CAPTURE_LIMIT_UI})'
+                return
             ok = lidar.sensor_camera_capture()
             if ok:
                 self._camera_count += 1
-            self._status_msg = '[CAMERA] captured' if ok else '[CAMERA] failed'
+                self._status_msg = (
+                    f'[CAMERA] captured ({self._camera_count}/{CAMERA_CAPTURE_LIMIT_UI})'
+                )
+            else:
+                self._status_msg = '[CAMERA] failed'
             return
 
         if key == 'c':
@@ -512,7 +522,9 @@ class SlamCustomUI:
 
         self._apply_view_window()
         self._refresh()
-        plt.tight_layout()
+        # Keep a stable layout: tight_layout can occasionally over-compress
+        # the map axis when info text changes or the window is resized.
+        self._fig.subplots_adjust(left=0.05, right=0.98, top=0.95, bottom=0.05, hspace=0.10)
         
         if _second_term_available:
             second_term.start()
