@@ -31,6 +31,7 @@ except ImportError:
 
 
 CAMERA_CAPTURE_LIMIT_UI = 10
+MAP_BYTES_SIZE = MAP_SIZE_PIXELS * MAP_SIZE_PIXELS
 
 
 class SlamCustomUI:
@@ -77,9 +78,44 @@ class SlamCustomUI:
         self._is_shutting_down = False
 
     def _snapshot(self):
+        if self._is_shutting_down:
+            return {
+                'mapbytes': bytes(MAP_BYTES_SIZE),
+                'x_mm': 0.0,
+                'y_mm': 0.0,
+                'theta_deg': 0.0,
+                'valid_points': 0,
+                'status_note': 'shutting down',
+                'rounds_seen': 0,
+                'map_version': 0,
+                'pose_version': 0,
+                'connected': False,
+                'paused': False,
+                'stopped': True,
+                'error_message': None,
+            }
+
+        shm = getattr(self.pss, 'shm', None)
+        if shm is None:
+            return {
+                'mapbytes': bytes(MAP_BYTES_SIZE),
+                'x_mm': 0.0,
+                'y_mm': 0.0,
+                'theta_deg': 0.0,
+                'valid_points': 0,
+                'status_note': 'shared memory unavailable',
+                'rounds_seen': 0,
+                'map_version': 0,
+                'pose_version': 0,
+                'connected': False,
+                'paused': False,
+                'stopped': True,
+                'error_message': 'shared memory unavailable',
+            }
+
         error = self.pss.get_error()
         return {
-            'mapbytes': bytes(self.pss.shm.buf),
+            'mapbytes': bytes(shm.buf[:MAP_BYTES_SIZE]),
             'x_mm': self.pss.x_mm.value,
             'y_mm': self.pss.y_mm.value,
             'theta_deg': self.pss.theta_deg.value,
@@ -96,7 +132,7 @@ class SlamCustomUI:
 
     @staticmethod
     def _map_image_from_bytes(mapbytes: bytes) -> np.ndarray:
-        arr = np.frombuffer(mapbytes, dtype=np.uint8).reshape(MAP_SIZE_PIXELS, MAP_SIZE_PIXELS)
+        arr = np.frombuffer(mapbytes[:MAP_BYTES_SIZE], dtype=np.uint8).reshape(MAP_SIZE_PIXELS, MAP_SIZE_PIXELS)
         # Display with x to the right and y upward (north-up map view).
         arr = np.flipud(arr)
         return arr
