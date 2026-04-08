@@ -3,5 +3,5 @@ On windows:
 
 ```.\env\Scripts\activate.bat```
 
-```pip install "git+https://github.com/simondlevy/BreezySLAM.git#subdirectory=python" textual```
+```pip install "git+https://github.com/simondlevy/BreezySLAM.git#subdirectory=python" matplotlib numpy```
 
