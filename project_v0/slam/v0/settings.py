@@ -57,6 +57,11 @@ DETECTION_ANGLE = 360
 # Readings beyond this distance (in mm) are treated as misses (no return).
 MAX_DISTANCE_MM = 12000
 
+# Maximum allowed pose change between two consecutive scans.
+# Set to 0 to disable either limiter.
+MAX_TRANSLATION_PER_SCAN_MM = 250
+MAX_ROTATION_PER_SCAN_DEG = 20
+
 # ===========================================================================
 # LIDAR mounting offset
 # ===========================================================================

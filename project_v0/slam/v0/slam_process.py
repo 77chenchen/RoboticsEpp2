@@ -23,13 +23,14 @@ MAX_DISTANCE_MM (treated as "no obstacle detected").
 from __future__ import annotations
 
 import time
+import math
 from typing import Optional
 
 from settings import (
     SCAN_SIZE, SCAN_RATE_HZ, DETECTION_ANGLE, MAX_DISTANCE_MM,
     MAP_SIZE_PIXELS, MAP_SIZE_METERS, HOLE_WIDTH_MM, MAP_QUALITY,
     LIDAR_OFFSET_DEG, LIDAR_ANGLE_SIGN, MIN_VALID_POINTS, INITIAL_ROUNDS_SKIP,
-    MAP_UPDATE_INTERVAL,
+    MAP_UPDATE_INTERVAL, MAX_TRANSLATION_PER_SCAN_MM, MAX_ROTATION_PER_SCAN_DEG,
 )
 from shared_state import ProcessSharedState
 
@@ -94,6 +95,44 @@ def _resample_scan(
             scan_distances.append(MAX_DISTANCE_MM)
 
     return scan_distances, valid
+
+
+def _wrap_angle_deg(angle_deg: float) -> float:
+    return ((angle_deg + 180.0) % 360.0) - 180.0
+
+
+def _clamp_pose_delta(
+    prev_pose: tuple[float, float, float],
+    curr_pose: tuple[float, float, float],
+) -> tuple[tuple[float, float, float], bool]:
+    px, py, pth = prev_pose
+    cx, cy, cth = curr_pose
+
+    dx = cx - px
+    dy = cy - py
+    trans = math.hypot(dx, dy)
+    dth = _wrap_angle_deg(cth - pth)
+
+    max_trans = float(MAX_TRANSLATION_PER_SCAN_MM)
+    max_rot = float(MAX_ROTATION_PER_SCAN_DEG)
+
+    clamped = False
+    if max_trans > 0.0 and trans > max_trans and trans > 1e-9:
+        scale = max_trans / trans
+        cx = px + (dx * scale)
+        cy = py + (dy * scale)
+        clamped = True
+
+    if max_rot > 0.0:
+        if dth > max_rot:
+            dth = max_rot
+            clamped = True
+        elif dth < -max_rot:
+            dth = -max_rot
+            clamped = True
+    cth = (pth + dth) % 360.0
+
+    return (cx, cy, cth), clamped
 
 
 def run_slam_process(pss: ProcessSharedState) -> None:
@@ -163,6 +202,7 @@ def run_slam_process(pss: ProcessSharedState) -> None:
     # Keep the previous good scan so we can reuse it when a scan has too few
     # valid points (e.g. the robot is facing a large open area).
     previous_distances: Optional[list[int]] = None
+    previous_pose: Optional[tuple[float, float, float]] = None
     round_num = 0
     last_map_update = time.monotonic()
 
@@ -207,10 +247,19 @@ def run_slam_process(pss: ProcessSharedState) -> None:
 
             # Read the updated robot pose.
             x_mm, y_mm, theta_deg = slam.getpos()
+            if previous_pose is not None:
+                (x_mm, y_mm, theta_deg), was_clamped = _clamp_pose_delta(
+                    previous_pose,
+                    (x_mm, y_mm, theta_deg),
+                )
+                if was_clamped:
+                    note += ' | pose-clamped'
+
             pss.x_mm.value = x_mm
             pss.y_mm.value = y_mm
             pss.theta_deg.value = theta_deg
             pss.pose_version.value += 1
+            previous_pose = (x_mm, y_mm, theta_deg)
 
             # Copy the updated map into shared memory at a throttled rate.
             # Copying 1 MB on every scan would be expensive; once per second
