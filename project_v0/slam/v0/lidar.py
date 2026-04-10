@@ -16,9 +16,10 @@ import mpsv0_connection_params as net_params
 import struct
 import asyncio
 import threading
+import time
 
 from typing import Optional, Tuple, List, Generator
-from settings import LIDAR_PORT, LIDAR_BAUD
+from settings import LIDAR_PORT, LIDAR_BAUD, LIDAR_POLL_DELAY
 from packets import (
     COMMAND_FORWARD,
     COMMAND_BACKWARD,
@@ -356,6 +357,9 @@ def scan_rounds(lidar_id, mode) -> Generator[Tuple[List[float], List[float]], No
     if not _run_in_background_loop(_start_scan_rounds_async(lidar_id, mode)):
         _client_log(f"[lidar] Failed to start scan rounds for LIDAR {lidar_id}")
         return
+
+    # Wait between requests using a direct delay value in seconds.
+    poll_delay_sec = float(LIDAR_POLL_DELAY)
     
     # Yield scans in a loop
     while True:
@@ -364,6 +368,8 @@ def scan_rounds(lidar_id, mode) -> Generator[Tuple[List[float], List[float]], No
             break
         angles, distances = result
         yield angles, distances
+        if poll_delay_sec > 0.0:
+            time.sleep(poll_delay_sec)
 
 
 def disconnect(lidar_id):

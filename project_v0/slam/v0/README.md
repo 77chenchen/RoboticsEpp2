@@ -69,3 +69,6 @@ If second terminal disconnects, you can reconnect by rerunning the command above
 
 ```python camera_receiver_server.py``` 
 
+
+
+MOVEMENT MOTOR SPEED: 130 is good 

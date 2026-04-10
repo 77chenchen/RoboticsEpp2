@@ -45,7 +45,11 @@ HOLE_WIDTH_MM = 100
 SCAN_SIZE = 360
 
 # Approximate rotation rate of the RPLidar A1M8 in scans per second.
-SCAN_RATE_HZ = 5
+SCAN_RATE_HZ = 2
+
+# Wait time (seconds) after receiving one scan response before requesting
+# the next scan response from the API server.
+LIDAR_POLL_DELAY = 0.07
 
 # Field of view of the LIDAR in degrees (360 for a full-rotation sensor).
 DETECTION_ANGLE = 360
