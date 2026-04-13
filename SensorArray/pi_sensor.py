@@ -22,8 +22,8 @@ import time
 import sys
 import select
 
-import camera_handler as CameraHandler  
-import lidar_scanner as LidarScanner
+#import camera_handler as CameraHandler  
+#mport lidar_scanner as LidarScanner
 from second_terminal import relay
 
 
@@ -425,15 +425,15 @@ pkt['data'], pkt['params']))
 if __name__ == '__main__':
     openSerial()
     relay.start()
-    LidarScanner.lidar_connect()
+   #LidarScanner.lidar_connect()
     #_camera = alex_camera.cameraOpen()
-    CameraHandler.camera_connect() 
+    #CameraHandler.camera_connect() 
     try:
         runCommandInterface()
     except KeyboardInterrupt:
         print("\nExiting.")
     finally:
         relay.shutdown()
-        LidarScanner.lidar_disconnect()
-        CameraHandler.camera_close()
+        #LidarScanner.lidar_disconnect()
+        #CameraHandler.camera_close()
         closeSerial()
