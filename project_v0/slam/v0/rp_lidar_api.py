@@ -148,7 +148,7 @@ def disconnect(lidar):
 _arduino_ser = None
 _estop_state = STATE_RUNNING
 _camera_connected = False
-CAMERA_CAPTURE_LIMIT = 10
+CAMERA_CAPTURE_LIMIT = 15
 _frames_remaining = CAMERA_CAPTURE_LIMIT
 _motor_speed = 150
 
@@ -163,8 +163,6 @@ def _debug_log(msg):
 
 
 def _debug_scan_mode_details(lidar, mode):
-    if not DEBUG_LIDAR:
-        return
     try:
         scan_modes = lidar.get_scan_modes()
         if 0 <= mode < len(scan_modes):
@@ -178,16 +176,21 @@ def _debug_scan_mode_details(lidar, mode):
                 0x84: 'ULTRA_CAPSULED',
                 0x85: 'DENSE_CAPSULED',
             }.get(ans_type_int, f'UNKNOWN({ans_type})')
-            _debug_log(
-                f"scan mode details mode={mode} ans_type=0x{ans_type_int:02X}({ans_name}) "
-                f"us_per_sample={getattr(selected, 'us_per_sample', 'n/a')} "
-                f"max_distance={getattr(selected, 'max_distance', 'n/a')} "
-                f"run_express={USE_EXPRESS_SCAN}"
-            )
+            if DEBUG_LIDAR:
+                _debug_log(
+                    f"scan mode details mode={mode} ans_type=0x{ans_type_int:02X}({ans_name}) "
+                    f"us_per_sample={getattr(selected, 'us_per_sample', 'n/a')} "
+                    f"max_distance={getattr(selected, 'max_distance', 'n/a')} "
+                    f"run_express={USE_EXPRESS_SCAN}"
+                )
+            return ans_type_int, ans_name
         else:
-            _debug_log(f"scan mode details mode={mode} out_of_range total_modes={len(scan_modes)}")
+            if DEBUG_LIDAR:
+                _debug_log(f"scan mode details mode={mode} out_of_range total_modes={len(scan_modes)}")
     except Exception as exc:
-        _debug_log(f"scan mode details unavailable mode={mode} err={exc}")
+        if DEBUG_LIDAR:
+            _debug_log(f"scan mode details unavailable mode={mode} err={exc}")
+    return None, None
 
 
 def _compute_checksum(data: bytes) -> int:
@@ -447,7 +450,17 @@ async def handle_client(reader, writer):
                 
                 if lidar_id in lidar_instances:
                     lidar = lidar_instances[lidar_id]
-                    _debug_scan_mode_details(lidar, mode)
+                    ans_type_int, ans_name = _debug_scan_mode_details(lidar, mode)
+                    if (ans_type_int in (0x82, 0x83, 0x84, 0x85)) and (not USE_EXPRESS_SCAN):
+                        print(
+                            f"[lidar-warning] mode={mode} ans_type={ans_name} requires --express; "
+                            f"current run_express={USE_EXPRESS_SCAN} may produce malformed scans"
+                        )
+                    if (ans_type_int == 0x81) and USE_EXPRESS_SCAN:
+                        print(
+                            f"[lidar-warning] mode={mode} ans_type={ans_name} is NORMAL; "
+                            f"running with --express may be suboptimal"
+                        )
                     scan_generators[lidar_id] = scan_rounds(lidar, mode)
                     scan_mode_tracker[lidar_id] = mode
                     response = struct.pack('b', 1)  # success
