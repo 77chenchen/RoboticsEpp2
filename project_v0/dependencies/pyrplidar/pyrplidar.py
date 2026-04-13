@@ -146,14 +146,26 @@ class PyRPlidar:
             raise PyRPlidarProtocolError("RPlidar Error : scan data type is not supported")
         
         def scan_generator():
-            
-            data = self.receive_data(discriptor)
-            capsule_prev = capsule_type(data)
-            capsule_current = None
+            dropped_capsules = 0
+
+            def read_valid_capsule():
+                nonlocal dropped_capsules
+                while True:
+                    data = self.receive_data(discriptor)
+                    capsule = capsule_type(data)
+                    if getattr(capsule, "valid_header", True):
+                        if dropped_capsules:
+                            print(f"PyRPlidar warning: recovered capsule sync after dropped={dropped_capsules}")
+                            dropped_capsules = 0
+                        return capsule
+                    dropped_capsules += 1
+                    if dropped_capsules == 1 or (dropped_capsules % 50) == 0:
+                        print(f"PyRPlidar warning: dropped invalid capsule header/checksum count={dropped_capsules}")
+
+            capsule_prev = read_valid_capsule()
             
             while True:
-                data = self.receive_data(discriptor)
-                capsule_current = capsule_type(data)
+                capsule_current = read_valid_capsule()
                 
                 nodes = capsule_type._parse_capsule(capsule_prev, capsule_current)
                 for index, node in enumerate(nodes):

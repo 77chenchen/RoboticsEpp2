@@ -76,6 +76,29 @@ VBS_TARGET_BASE = [(0x1 << RPLIDAR_VARBITSCALE_X16_SRC_BIT),
                    (0x1 << RPLIDAR_VARBITSCALE_X2_SRC_BIT),
                    0]
 
+RPLIDAR_EXP_SYNC_BYTE1 = 0xA
+RPLIDAR_EXP_SYNC_BYTE2 = 0x5
+
+
+def _capsule_checksum(raw_bytes):
+    checksum = 0
+    for value in raw_bytes[2:]:
+        checksum ^= value
+    return checksum & 0xFF
+
+
+def _capsule_header_is_valid(raw_bytes):
+    if raw_bytes is None or len(raw_bytes) < 4:
+        return False
+    sync_byte1 = (raw_bytes[0] >> 4) & 0xF
+    sync_byte2 = (raw_bytes[1] >> 4) & 0xF
+    checksum = (raw_bytes[0] & 0xF) + ((raw_bytes[1] & 0xF) << 4)
+    return (
+        sync_byte1 == RPLIDAR_EXP_SYNC_BYTE1
+        and sync_byte2 == RPLIDAR_EXP_SYNC_BYTE2
+        and checksum == _capsule_checksum(raw_bytes)
+    )
+
 
 
 class PyRPlidarConnectionError(Exception):
@@ -354,6 +377,7 @@ class PyRPlidarScanCapsule:
         self.sync_byte1 = (raw_bytes[0] >> 4) & 0xF
         self.sync_byte2 = (raw_bytes[1] >> 4) & 0xF
         self.checksum = (raw_bytes[0] & 0xF) + ((raw_bytes[1] & 0xF) << 4)
+        self.valid_header = _capsule_header_is_valid(raw_bytes)
         self.start_angle_q6 = raw_bytes[2] + ((raw_bytes[3] & 0x7F) << 8)
         self.start_flag = bool((raw_bytes[3] >> 7) & 0x1)
         self.cabins = list(map(
@@ -437,6 +461,7 @@ class PyRPlidarScanDenseCapsule:
         self.sync_byte1 = (raw_bytes[0] >> 4) & 0xF
         self.sync_byte2 = (raw_bytes[1] >> 4) & 0xF
         self.checksum = (raw_bytes[0] & 0xF) + ((raw_bytes[1] & 0xF) << 4)
+        self.valid_header = _capsule_header_is_valid(raw_bytes)
         self.start_angle_q6 = raw_bytes[2] + ((raw_bytes[3] & 0x7F) << 8)
         self.start_flag = bool((raw_bytes[3] >> 7) & 0x1)
         self.cabins = list(map(
@@ -516,6 +541,7 @@ class PyRPlidarScanUltraCapsule:
         self.sync_byte1 = (raw_bytes[0] >> 4) & 0xF
         self.sync_byte2 = (raw_bytes[1] >> 4) & 0xF
         self.checksum = (raw_bytes[0] & 0xF) + ((raw_bytes[1] & 0xF) << 4)
+        self.valid_header = _capsule_header_is_valid(raw_bytes)
         self.start_angle_q6 = raw_bytes[2] + ((raw_bytes[3] & 0x7F) << 8)
         self.start_flag = bool((raw_bytes[3] >> 7) & 0x1)
         self.ultra_cabins = list(map(
