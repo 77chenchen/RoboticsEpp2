@@ -17,6 +17,7 @@ import mpsv0_connection_params as net_params
 import struct 
 import asyncio 
 import serial
+import os
 
 import sys 
 from pathlib import Path 
@@ -84,12 +85,34 @@ def scan_rounds(lidar, mode):
     """
     buff = []
     started = False
+    round_index = 0
     for meas in lidar.start_scan()():#mode)():
         if meas.start_flag:
             # A start_flag marks the beginning of a new rotation.
             # Yield the completed buffer from the previous rotation.
             if started and buff:
-                yield [m.angle for m in buff], [m.distance for m in buff]
+                round_index += 1
+                angles = [m.angle for m in buff]
+                distances = [m.distance for m in buff]
+                count = len(distances)
+                valid_nonzero = sum(1 for d in distances if d > 0)
+
+                if count <= 1:
+                    one = buff[0]
+                    _debug_log(
+                        f"scan_round suspicious count={count} valid_nonzero={valid_nonzero} "
+                        f"angle={one.angle:.2f} distance={one.distance:.2f} quality={getattr(one, 'quality', 'n/a')} "
+                        f"mode={mode}"
+                    )
+                elif round_index % SCAN_DEBUG_EVERY_N == 0:
+                    min_d = min(distances)
+                    max_d = max(distances)
+                    _debug_log(
+                        f"scan_round ok idx={round_index} count={count} valid_nonzero={valid_nonzero} "
+                        f"dist_range=[{min_d:.2f},{max_d:.2f}] mode={mode}"
+                    )
+
+                yield angles, distances
             buff = [meas]
             started = True
         elif started:
@@ -112,6 +135,15 @@ _camera_connected = False
 CAMERA_CAPTURE_LIMIT = 10
 _frames_remaining = CAMERA_CAPTURE_LIMIT
 _motor_speed = 150
+
+DEBUG_LIDAR = os.getenv("RP_LIDAR_DEBUG", "1") not in ("0", "false", "False", "no", "NO")
+SCAN_DEBUG_EVERY_N = max(1, int(os.getenv("RP_LIDAR_SCAN_DEBUG_EVERY_N", "20")))
+NETWORK_SLOW_DRAIN_MS = float(os.getenv("RP_LIDAR_SLOW_DRAIN_MS", "50"))
+
+
+def _debug_log(msg):
+    if DEBUG_LIDAR:
+        print(f"[lidar-debug] {msg}")
 
 
 def _compute_checksum(data: bytes) -> int:
@@ -287,6 +319,20 @@ lidar_instances = {}
 scan_generators = {}
 next_lidar_id = 1
 scan_mode_tracker = {}
+scan_runtime_stats = {}
+
+
+def _scan_stats_for(lidar_id):
+    if lidar_id not in scan_runtime_stats:
+        scan_runtime_stats[lidar_id] = {
+            'requests': 0,
+            'rounds_sent': 0,
+            'one_point_rounds': 0,
+            'last_request_ts': None,
+            'last_send_ts': None,
+            'bytes_sent': 0,
+        }
+    return scan_runtime_stats[lidar_id]
 
 async def handle_client(reader, writer):
     global next_lidar_id, _frames_remaining, _motor_speed
@@ -370,10 +416,19 @@ async def handle_client(reader, writer):
             elif command == net_params.CMD_GET_NEXT_SCAN_ROUND:
                 lidar_id_data = await reader.readexactly(4)
                 lidar_id = struct.unpack('i', lidar_id_data)[0]
+                stats = _scan_stats_for(lidar_id)
+                now = time.time()
+                stats['requests'] += 1
+                if stats['last_request_ts'] is not None and stats['requests'] % SCAN_DEBUG_EVERY_N == 0:
+                    dt_ms = (now - stats['last_request_ts']) * 1000.0
+                    _debug_log(f"net request cadence lidar={lidar_id} req={stats['requests']} dt={dt_ms:.1f}ms")
+                stats['last_request_ts'] = now
                 
                 if lidar_id in scan_generators:
                     try:
+                        t_get0 = time.perf_counter()
                         angles, distances = next(scan_generators[lidar_id])
+                        t_get1 = time.perf_counter()
                         # Send success flag
                         writer.write(struct.pack('b', 1))
                         # Send count
@@ -385,7 +440,33 @@ async def handle_client(reader, writer):
                         # Send distances
                         for distance in distances:
                             writer.write(struct.pack('f', distance))
+                        t_drain0 = time.perf_counter()
                         await writer.drain()
+                        t_drain1 = time.perf_counter()
+
+                        payload_bytes = 1 + 4 + (count * 4) + (count * 4)
+                        stats['rounds_sent'] += 1
+                        stats['bytes_sent'] += payload_bytes
+                        stats['last_send_ts'] = time.time()
+                        if count <= 1:
+                            stats['one_point_rounds'] += 1
+
+                        if count <= 1 or stats['rounds_sent'] % SCAN_DEBUG_EVERY_N == 0:
+                            valid_nonzero = sum(1 for d in distances if d > 0)
+                            get_ms = (t_get1 - t_get0) * 1000.0
+                            drain_ms = (t_drain1 - t_drain0) * 1000.0
+                            transport = writer.transport
+                            write_buf = transport.get_write_buffer_size() if transport else -1
+                            _debug_log(
+                                f"net send lidar={lidar_id} rounds={stats['rounds_sent']} count={count} "
+                                f"valid_nonzero={valid_nonzero} payload={payload_bytes}B get={get_ms:.2f}ms "
+                                f"drain={drain_ms:.2f}ms write_buf={write_buf} one_point_total={stats['one_point_rounds']}"
+                            )
+                            if drain_ms > NETWORK_SLOW_DRAIN_MS:
+                                _debug_log(
+                                    f"net warning slow drain lidar={lidar_id} drain={drain_ms:.2f}ms "
+                                    f"threshold={NETWORK_SLOW_DRAIN_MS:.2f}ms"
+                                )
                         # don't print anymore to save compute & not clog logs 
                         #print(f"  Sent scan round {count} measurements for LIDAR {lidar_id}")
                     except StopIteration:
@@ -409,6 +490,12 @@ async def handle_client(reader, writer):
                         del scan_generators[lidar_id]
                     if lidar_id in scan_mode_tracker:
                         del scan_mode_tracker[lidar_id]
+                    if lidar_id in scan_runtime_stats:
+                        stats = scan_runtime_stats.pop(lidar_id)
+                        _debug_log(
+                            f"disconnect stats lidar={lidar_id} req={stats['requests']} sent={stats['rounds_sent']} "
+                            f"one_point={stats['one_point_rounds']} bytes={stats['bytes_sent']}"
+                        )
                     response = struct.pack('b', 1)  # success
                     print(f"  Disconnected LIDAR {lidar_id}")
                 else:
@@ -560,6 +647,12 @@ async def handle_client(reader, writer):
             try:
                 disconnect(lidar_instances[client_lidar_id])
                 del lidar_instances[client_lidar_id]
+                if client_lidar_id in scan_runtime_stats:
+                    stats = scan_runtime_stats.pop(client_lidar_id)
+                    _debug_log(
+                        f"client-close stats lidar={client_lidar_id} req={stats['requests']} sent={stats['rounds_sent']} "
+                        f"one_point={stats['one_point_rounds']} bytes={stats['bytes_sent']}"
+                    )
             except:
                 pass
         _close_arduino_serial()
