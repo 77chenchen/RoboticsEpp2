@@ -124,8 +124,50 @@ class PyRPlidar:
         discriptor = self.receive_discriptor()
     
         def scan_generator():
+            nonlocal discriptor
+            invalid_frames = 0
+            hard_resyncs = 0
+
+            def shift_resync(raw, max_shift=5):
+                if self.lidar_serial is None:
+                    return raw, False
+
+                shifted = raw
+                for _ in range(max_shift):
+                    if PyRPlidarMeasurement.is_valid_raw_bytes(shifted):
+                        return shifted, True
+                    tail = self.lidar_serial.receive_data(1)
+                    if len(tail) != 1:
+                        break
+                    shifted = shifted[1:] + tail
+                return shifted, PyRPlidarMeasurement.is_valid_raw_bytes(shifted)
+
             while True:
                 data = self.receive_data(discriptor)
+                if not PyRPlidarMeasurement.is_valid_raw_bytes(data):
+                    data, ok = shift_resync(data)
+                    if ok:
+                        invalid_frames += 1
+                        if invalid_frames == 1 or (invalid_frames % 25) == 0:
+                            print(f"PyRPlidar warning: shifted-byte resync hit count={invalid_frames}")
+                    else:
+                        invalid_frames += 1
+                        if invalid_frames == 1 or (invalid_frames % 25) == 0:
+                            print(f"PyRPlidar warning: dropped invalid normal frame count={invalid_frames}")
+
+                        if invalid_frames >= 100:
+                            hard_resyncs += 1
+                            print(f"PyRPlidar warning: forcing SCAN resync attempt={hard_resyncs}")
+                            self.send_command(RPLIDAR_CMD_STOP)
+                            self.send_command(RPLIDAR_CMD_SCAN)
+                            discriptor = self.receive_discriptor()
+                            invalid_frames = 0
+                        continue
+
+                elif invalid_frames > 0:
+                    print(f"PyRPlidar warning: recovered normal stream after invalid={invalid_frames}")
+                    invalid_frames = 0
+
                 yield PyRPlidarMeasurement(data)
     
         return scan_generator

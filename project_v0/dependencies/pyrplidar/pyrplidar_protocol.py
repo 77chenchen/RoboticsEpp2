@@ -277,6 +277,20 @@ class PyRPlidarScanMode:
 
 class PyRPlidarMeasurement:
 
+    @staticmethod
+    def is_valid_raw_bytes(raw_bytes):
+        if raw_bytes is None or len(raw_bytes) != 5:
+            return False
+
+        start_flag = raw_bytes[0] & 0x1
+        not_start_flag = (raw_bytes[0] >> 1) & 0x1
+        check_bit = raw_bytes[1] & 0x1
+
+        # RPLIDAR normal measurement sanity bits:
+        # - S and !S must be complementary
+        # - check bit must be 1
+        return (start_flag != not_start_flag) and (check_bit == 1)
+
     def __init__(self, raw_bytes=None, measurement_hq=None):
         if raw_bytes is not None:
             self.start_flag = bool(raw_bytes[0] & 0x1)
