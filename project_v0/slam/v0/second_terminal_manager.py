@@ -20,6 +20,7 @@ _estop_state = STATE_RUNNING
 _motor_speed = motor_speed
 _dot_callback = None
 _pose_callback = None
+_color_log_callback = None
 
 
 def _compute_checksum(data: bytes) -> int:
@@ -74,15 +75,17 @@ def _send_msg(text: str):
     relay.onPacketReceived(_pack_frame(PACKET_TYPE_MESSAGE, 0, data=text.encode('ascii', errors='replace')[:MAX_STR_LEN]))
 
 
-def configure_ui_callbacks(dot_callback=None, pose_callback=None):
+def configure_ui_callbacks(dot_callback=None, pose_callback=None, color_log_callback=None):
     """Register optional callbacks from UI for live map annotations.
 
     dot_callback signature: dot_callback(color_name, x_mm, y_mm)
     pose_callback signature: returns tuple (x_mm, y_mm)
+    color_log_callback signature: color_log_callback(source, r, g, b, x_mm, y_mm)
     """
-    global _dot_callback, _pose_callback
+    global _dot_callback, _pose_callback, _color_log_callback
     _dot_callback = dot_callback
     _pose_callback = pose_callback
+    _color_log_callback = color_log_callback
 
 
 def _classify_color_name(r: int, g: int, b: int) -> str:
@@ -188,10 +191,13 @@ def _process_command(pkt: dict):
             return
         r, g, b = int(rgb[0]), int(rgb[1]), int(rgb[2])
         _send_color(r, g, b)
-        if _dot_callback is not None and _pose_callback is not None:
+        if _pose_callback is not None:
             try:
                 x_mm, y_mm = _pose_callback()
-                _dot_callback(_classify_color_name(r, g, b), float(x_mm), float(y_mm))
+                if _dot_callback is not None:
+                    _dot_callback(_classify_color_name(r, g, b), float(x_mm), float(y_mm))
+                if _color_log_callback is not None:
+                    _color_log_callback('second_terminal', r, g, b, float(x_mm), float(y_mm))
             except Exception:
                 pass
         return

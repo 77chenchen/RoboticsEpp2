@@ -15,6 +15,7 @@ from __future__ import annotations
 import multiprocessing
 import math
 import time
+from pathlib import Path
 
 import numpy as np
 
@@ -22,6 +23,7 @@ from settings import MAP_SIZE_PIXELS, MAP_SIZE_METERS, UI_REFRESH_HZ
 from shared_state import ProcessSharedState
 from slam_process import run_slam_process
 import lidar
+from colour_logger import ColourRunLogger
 
 try:
     import second_terminal_manager as second_term
@@ -60,6 +62,7 @@ class SlamCustomUI:
         self._motor_speed = 150
         self._display_rotation_deg = 0.0
         self._last_rotation_deg = None
+        self._color_logger = ColourRunLogger(Path(__file__).with_name('colour_data'))
 
         n = MAP_SIZE_PIXELS - 1
         self._view_center_x = n / 2.0
@@ -289,7 +292,19 @@ class SlamCustomUI:
         self._last_map_version = -1
         self._last_pose_version = -1
         self._go_home_view()
+        x_mm, y_mm = self._current_pose_mm()
+        self._start_new_colour_run(x_mm, y_mm)
         self._status_msg = '[SLAM] reset requested'
+
+    def _start_new_colour_run(self, origin_x_mm: float, origin_y_mm: float):
+        path = self._color_logger.start_new_run(origin_x_mm, origin_y_mm)
+        self._status_msg = f'[COLOR-LOG] new run file {path.name}'
+
+    def _log_colour_reading(self, source: str, r: int, g: int, b: int, x_mm: float, y_mm: float):
+        try:
+            self._color_logger.log_color(source, r, g, b, x_mm, y_mm)
+        except Exception as exc:
+            self._status_msg = f'[COLOR-LOG] write failed: {exc}'
 
     @staticmethod
     def _classify_color(r: int, g: int, b: int) -> str:
@@ -407,6 +422,7 @@ class SlamCustomUI:
                 snap = self._snapshot()
                 color_name = self._classify_color(r, g, b)
                 self._stamp_color_at_robot(color_name, snap['x_mm'], snap['y_mm'])
+                self._log_colour_reading('ui', r, g, b, snap['x_mm'], snap['y_mm'])
                 self._status_msg = f'[COLOR] R={r} G={g} B={b} -> {color_name} dot placed'
             else:
                 self._status_msg = '[COLOR] read failed'
@@ -573,10 +589,14 @@ class SlamCustomUI:
                 second_term.configure_ui_callbacks(
                     dot_callback=self._stamp_color_at_robot,
                     pose_callback=self._current_pose_mm,
+                    color_log_callback=self._log_colour_reading,
                 )
             except Exception:
                 pass
             second_term.start()
+
+        # Start one colour CSV per run; reset creates a new file as well.
+        self._start_new_colour_run(0.0, 0.0)
 
         self.slam_proc.start()
         try:

@@ -4,3 +4,4 @@ ignore
 *__pycache__
 *.pyc
 project_v0/slam/v0/lidar_client.log
+project_v0/slam/v0/colour_data/
