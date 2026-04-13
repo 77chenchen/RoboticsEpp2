@@ -185,6 +185,13 @@ def scan_rounds(lidar, mode):
                         f"angle={one_angle:.2f} distance={one_distance:.2f} quality={one_quality} "
                         f"mode={mode}"
                     )
+                    if SKIP_TINY_ROUNDS:
+                        _debug_log(
+                            f"scan_round skipped_tiny idx={round_index} mode={mode} count={count}"
+                        )
+                        buff = [meas]
+                        started = True
+                        continue
                 elif any((a < 0.0 or a > 360.0) for a in angles):
                     outlier_angles = [a for a in angles if (a < 0.0 or a > 360.0)]
                     _debug_log(
@@ -226,6 +233,7 @@ _motor_speed = 150
 DEBUG_LIDAR = "--debug" in sys.argv #os.getenv("RP_LIDAR_DEBUG", "1") not in ("0", "false", "False", "no", "NO")
 SCAN_DEBUG_EVERY_N = max(1, int(os.getenv("RP_LIDAR_SCAN_DEBUG_EVERY_N", "20")))
 NETWORK_SLOW_DRAIN_MS = float(os.getenv("RP_LIDAR_SLOW_DRAIN_MS", "50"))
+SKIP_TINY_ROUNDS = os.getenv("RP_LIDAR_SKIP_TINY_ROUNDS", "1") not in ("0", "false", "False", "no", "NO")
 EXPRESS_FILTER_ENABLE = os.getenv("RP_LIDAR_EXPRESS_FILTER", "1") not in ("0", "false", "False", "no", "NO")
 EXPRESS_MAX_DISTANCE_MM = float(os.getenv("RP_LIDAR_EXPRESS_MAX_DISTANCE_MM", "12000"))
 NONEXPRESS_FILTER_ENABLE = os.getenv("RP_LIDAR_NONEXPRESS_FILTER", "1") not in ("0", "false", "False", "no", "NO")
