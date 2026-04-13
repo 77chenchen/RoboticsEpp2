@@ -22,7 +22,7 @@ import os
 import sys 
 from pathlib import Path 
 sys.path.insert(1, str(Path(__file__).parent.parent.parent.parent/"project_v0"/"dependencies"))
-sys.path.insert(1, str(Path(__file__).parent.parent.parent.parent/"project_v0"/"dependencies"/"pyprlidar"))
+sys.path.insert(1, str(Path(__file__).parent.parent.parent.parent/"project_v0"/"dependencies"/"pyrplidar"))
 print(sys.path[1])
 
 USE_EXPRESS_SCAN = "--express" in sys.argv
