@@ -17,7 +17,6 @@
  *                    - Application logic: packet helpers, E-Stop state
  *                      machine, color sensor, setup(), and loop().
  */
-
 #include <Servo.h>
 #include "packets.h"
 #include "serial_driver.h"
