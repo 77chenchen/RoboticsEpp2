@@ -17,7 +17,6 @@
  *                    - Application logic: packet helpers, E-Stop state
  *                      machine, color sensor, setup(), and loop().
  */
-
 #include <Servo.h>
 #include "packets.h"
 #include "serial_driver.h"
@@ -81,9 +80,9 @@ bool currentStatus = true;     //helper variable for INT5 ISR
 #define ARM_BASE_MIN      0
 #define ARM_BASE_MAX      180
 #define ARM_SHOULDER_MIN  80
-#define ARM_SHOULDER_MAX  130
+#define ARM_SHOULDER_MAX  150
 #define ARM_ELBOW_MIN     60
-#define ARM_ELBOW_MAX     140
+#define ARM_ELBOW_MAX     150
 #define ARM_GRIPPER_MIN   80
 #define ARM_GRIPPER_MAX   100
 #define ARM_SPEED_MIN     1

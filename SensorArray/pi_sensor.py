@@ -426,7 +426,7 @@ if __name__ == '__main__':
     openSerial()
     relay.start()
     LidarScanner.lidar_connect()
-    #_camera = alex_camera.cameraOpen()
+    _camera = alex_camera.cameraOpen()
     CameraHandler.camera_connect() 
     try:
         runCommandInterface()
